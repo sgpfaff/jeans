@@ -35,10 +35,13 @@ _UMAX_DEFAULT = 60.0
 
 _CACHE = {}
 
-# Filled in on first call to table(). Published values, reproduced by the test
-# suite: R_MAX = 1.2615266 at u = 22.542.
-R_MAX = 1.2615265993
-U_AT_R_MAX = 22.5423923
+# Provisional values, replaced by refresh_constants() on first use of the
+# branch. They must never exceed the stored table's own maximum: a literal
+# 4.7e-9 above it made seed()'s clamped retry land past the branch end, so the
+# retry returned None on 100% of R >= R_MAX configurations and the with-baryon
+# fallback was dead code. R_MAX is now derived from the table, not asserted.
+R_MAX = 1.2615265933849009
+U_AT_R_MAX = 22.544206
 
 
 def table(n=_N_DEFAULT, umax=_UMAX_DEFAULT):
@@ -114,7 +117,13 @@ def seed(r1, rho1, M1, GN=4.302e-6):
     """
     out = solve(r1, rho1, M1, GN=GN)
     if out is None:
-        rho_clamped = M1 / (4.0 * np.pi * r1 ** 3 * R_MAX * (1.0 - 1e-9))
+        # Clamp against the table's own branch end rather than against R_MAX.
+        # Deriving the bound from the same array that solve() tests makes the
+        # retry correct by construction; comparing against a separately stored
+        # constant is what made it fail every time.
+        _, g, _, _ = _first_branch()
+        r_end = float(np.exp(g[-1]) / 3.0)
+        rho_clamped = M1 / (4.0 * np.pi * r1 ** 3 * r_end * (1.0 - 1e-12))
         out = solve(r1, rho_clamped, M1, GN=GN)
         if out is None:
             return None

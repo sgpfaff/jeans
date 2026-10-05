@@ -117,3 +117,37 @@ def test_isotropic_potential_averages_exactly():
 def test_rejects_an_unsupported_signature():
     with pytest.raises(ValueError, match="1 or 2 arguments"):
         tabulate_baryons(lambda r, th, extra: 0.0, np.array([1.0]), np.array([0.5]))
+
+
+def test_R_MAX_never_exceeds_the_table_it_describes():
+    """Regression: R_MAX was a literal 4.7e-9 ABOVE exp(g[-1])/3.
+
+    seed() falls back to a clamped retry when no no-baryon solution exists,
+    because adding baryons moves the existence boundary and such a
+    configuration may still be solvable. Clamping against a constant that sat
+    above the table's own branch end put the retry past the end as well, so it
+    returned None every time and the with-baryon fallback was dead code.
+    """
+    u, g, _, _ = universal._first_branch()
+    table_max = float(np.exp(g[-1]) / 3.0)
+    assert universal.R_MAX <= table_max, (
+        f"R_MAX {universal.R_MAX!r} exceeds the table's own maximum {table_max!r} "
+        "by %.2e relative" % (universal.R_MAX / table_max - 1)
+    )
+
+
+def test_seed_always_returns_something_above_R_MAX():
+    """The clamped retry must actually produce a seed, not None."""
+    rng = np.random.default_rng(0)
+    checked = 0
+    for _ in range(2000):
+        r1 = float(rng.uniform(1.0, 30.0))
+        M1 = float(10 ** rng.uniform(9.0, 12.0))
+        rho1 = float(10 ** rng.uniform(4.0, 8.0))
+        if universal.matching_ratio_of(r1, rho1, M1) < universal.R_MAX:
+            continue
+        checked += 1
+        s = universal.seed(r1, rho1, M1)
+        assert s is not None, f"no seed at r1={r1}, rho1={rho1:.3e}, M1={M1:.3e}"
+        assert np.all(np.isfinite(s))
+    assert checked > 100, f"only {checked} draws exercised the clamped path"
