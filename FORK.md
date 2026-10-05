@@ -34,11 +34,13 @@ D2's NaN and D6's Jensen gap both change published numbers, not just error paths
 
 ```python
 from jeans.classes import CDM_profile
-from jeans.fast.solver import solve_spherical
+from jeans.fast.outer import boundary_data
+from jeans.fast.solver2d import solve_axisymmetric
 
-outer = CDM_profile(1e12, 10.0, q0=1.0, Phi_b=my_disc)
-res = solve_spherical(10.0, outer.rho_sph(10.0), outer.M_encl(10.0), Phi_b=my_disc)
-res.r0, res.sigma0
+halo = CDM_profile(1e12, 10.0, q0=0.8, Phi_b=my_disc)
+rho1, M1, J_L = boundary_data(halo, 10.0, L_list=(0, 2))
+res = solve_axisymmetric(10.0, rho1, M1, J_L=J_L, L_list=(0, 2), Phi_b=my_disc)
+res.r0, res.sigma0, res.phi_at(2, 9.9)
 ```
 
 | module | contents |
@@ -48,6 +50,7 @@ res.r0, res.sigma0
 | `quadrature.py` | Fixed-node Gauss-Legendre in `cos(theta)` with cached harmonics, replacing adaptive `scipy.quad`. |
 | `solver.py` | The spherical solver: interpolation without baryons, continuation in the baryon amplitude with them. |
 | `solver2d.py` | The axisymmetric solver: nonlinear monopole alternating with a linear-response shape solve. |
+| `outer.py` | Outer-halo boundary data on fixed nodes, replacing two nested adaptive quadratures. |
 
 Measured against the package, all at matched accuracy:
 
@@ -59,6 +62,24 @@ Measured against the package, all at matched accuracy:
 | 2D `L=[0,2]`, q0=0.8, no baryons | 6.2 s | 6.4 ms | 960x | 7.8e-5 |
 | 2D `L=[0,2]` + disc | 15.1 s | 39 ms | 390x | 2.0e-4 |
 | 2D `L=[0,2,4]` + disc | 30.4 s | 57 ms | 530x | 2.1e-4 |
+
+Outer-halo boundary data, which became the bottleneck once the interior solve
+was reduced:
+
+| quantity | package | reduced | speed-up | agreement |
+|----------|---------|---------|----------|-----------|
+| `J_L`, q0=0.8 + disc | 1029 ms | 8.4 ms | 123x | 3.0e-7 |
+| `M(<r1)`, q0=0.8 | 48 ms | 7.3 ms | 6.6x | 5.7e-11 |
+| full chain, q0=0.8 | 1413 ms | 14.6 ms | **97x** | - |
+
+Both were nested adaptive quadrature. `compute_potential_moments` ran an
+adaptive `solve_ivp` in r whose integrand was an adaptive `quad` in theta,
+repeated over widening radial shells until the tail converged; under
+`t = r1/r` the infinite tail maps to `t -> 0` where the integrand is finite,
+so one fixed Gauss-Legendre rule covers the whole range. `M_encl` rebuilt a
+300-point spline per call with an angular average at every point; the
+substitution `r = r1 v^2` turns its `r^-1` central cusp into a smooth `v^3`,
+so no inner cutoff is needed either.
 
 Those are monopole errors. The shape `phi_L` carries an extra error quadratic
 in the halo's own multipoles, because the L>0 sector is linearised about the
@@ -75,9 +96,13 @@ package's radial grid closes the gap as `O(N^-2)` with no floor.
 
 ## Status
 
-Stage 0 (defect fixes) and Stage 1 (1D and 2D reduced solvers) are done. Still
-to come: a JAX backend with implicit-function gradients, a second-order or
-block-tridiagonal treatment of L=4, and the benchmark harness.
+Defect fixes, the 1D and 2D reduced solvers, the fast outer halo and the
+benchmark harness are done. Still to come: a JAX backend with
+implicit-function gradients, and a second-order or block-tridiagonal treatment
+of L=4.
+
+Measurements and methodology: `bench/README.md`, and the
+[benchmark report](https://claude.ai/artifact/2yZYkZpa6fyeNns5qzMJsw).
 
 Nothing here has been offered upstream yet. The defect fixes are useful on their
 own and are the natural first contribution.
@@ -90,7 +115,7 @@ package build costs 0.3-30 s.
 
 ```sh
 PYTHONPATH=src python -m pytest -m "not slow" -q   # 8 tests, 0.9 s
-PYTHONPATH=src python -m pytest -q                 # 47 tests, 2.6 min
+PYTHONPATH=src python -m pytest -q                 # 63 tests, 2.3 min
 ```
 
 Package references are memoised for the session in `tests/conftest.py`; only
