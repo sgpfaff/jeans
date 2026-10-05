@@ -222,7 +222,8 @@ def _newton(logp, P, tol=1e-11, max_iter=60):
 
 
 def solve_spherical(r1, rho1, M1, Phi_b=None, n_steps=200, n_gl=N_GL_DEFAULT,
-                    half_range=True, n_ramp=16, trajectory=False, tol=1e-11):
+                    half_range=True, n_ramp=16, trajectory=False, tol=1e-11,
+                    verify=True, verify_rtol=1e-6):
     """Solve the spherical isothermal Jeans model matched at r1.
 
     Parameters
@@ -238,6 +239,13 @@ def solve_spherical(r1, rho1, M1, Phi_b=None, n_steps=200, n_gl=N_GL_DEFAULT,
     n_ramp : int
         Continuation stages in the baryon amplitude. 16 gave 0 spurious roots
         in 314/314 cases; 8 gave 0.32% and 4 gave 1.27%.
+    verify : bool
+        Re-solve at twice the ramp density and require the two to agree. Past
+        a fold the residual is useless as a correctness test -- spurious roots
+        satisfy it to 1e-15 -- but they are artefacts of the continuation path,
+        so they move when the schedule changes while a genuine root does not.
+        Costs one extra solve and is the only check found that works; see
+        _schedule_independent.
 
     Returns
     -------
@@ -285,12 +293,59 @@ def solve_spherical(r1, rho1, M1, Phi_b=None, n_steps=200, n_gl=N_GL_DEFAULT,
     residual = float(np.max(np.abs(_residual(logp, P))))
     r0 = float(np.exp(0.5 * logp[0]))
     sigma0 = float(np.exp(0.5 * logp[1]))
-    res = SphericalResult(r0, sigma0, ok, "ok" if ok else "not_converged",
+    reason = "ok" if ok else "not_converged"
+
+    if ok and verify:
+        agree, other = _schedule_independent(
+            r1, rho1, M1, Phi_b, n_steps, n_gl, half_range, n_ramp, tol,
+            r0, verify_rtol)
+        if not agree:
+            ok = False
+            reason = "schedule_dependent_root(r0=%.6g at n_ramp=%d)" % (
+                other, 2 * n_ramp)
+
+    res = SphericalResult(r0, sigma0, ok, reason,
                           residual, ratio, P.n_eval,
                           rho0=sigma0 ** 2 / (4.0 * np.pi * GN * r0 ** 2))
     if trajectory:
         _attach(res, r1, Phi_b, n_steps, n_gl, half_range)
     return res
+
+
+def _schedule_independent(r1, rho1, M1, Phi_b, n_steps, n_gl, half_range,
+                          n_ramp, tol, r0, rtol):
+    """Re-solve at twice the ramp density; return (agrees, the other r0).
+
+    Past a saddle-node fold the residual stops being a correctness test: the
+    spurious roots satisfy it to 1e-15, and in measured cases the answer was
+    wrong by factors of 50 to 2000 while every other diagnostic looked clean.
+    What distinguishes them is that they are artefacts of the path the
+    continuation took, so they move when the schedule changes. A genuine root
+    does not: over configurations with a real solution the two densities agree
+    to far better than rtol.
+
+    This is a necessary condition rather than a sufficient one -- two schedules
+    can land on the same wrong branch -- so it is a filter, not a proof.
+    """
+    P = _Problem(r1, rho1, M1, n_steps, Phi_b, n_gl, half_range)
+    logp = universal.seed(r1, rho1, M1, GN=GN)
+    if logp is None:
+        return True, np.nan          # nothing to compare against
+    k_max = 2 * n_ramp
+    prev = None
+    for k in range(1, k_max + 1):
+        P.set_upsilon(k / k_max)
+        start = logp if prev is None else logp + (logp - prev)
+        prev = logp
+        logp, good = _newton(start, P, tol=tol)
+        if not good:
+            logp, good = _newton(prev, P, tol=tol)
+        if not good:
+            # The denser schedule failed where the sparser one succeeded. That
+            # is itself evidence the root is not robust, so do not pass it.
+            return False, np.nan
+    other = float(np.exp(0.5 * logp[0]))
+    return abs(other / r0 - 1.0) <= rtol, other
 
 
 def _attach(res, r1, Phi_b, n_steps, n_gl, half_range):

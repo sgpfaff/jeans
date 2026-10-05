@@ -32,6 +32,11 @@ def hernquist_phi(r):
     return -GN * MSTAR / (r + A_H)
 
 
+def _disc(Md, a, b):
+    return lambda r, th: -GN * Md / np.sqrt(
+        r ** 2 * np.sin(th) ** 2 + (a + np.sqrt(b ** 2 + r ** 2 * np.cos(th) ** 2)) ** 2)
+
+
 CASES = [(10, 1e12, 10.0), (30, 1e13, 7.0), (3, 1e11, 12.0),
          (20, 5e12, 8.0), (1, 3e10, 15.0)]
 
@@ -141,3 +146,39 @@ def test_package_converges_toward_the_fast_solution(pkg_spherical, outer_data):
         errs.append(abs(h.inner.r0 / fast.r0 - 1.0))
     orders = [np.log(a / b) / np.log(2.0) for a, b in zip(errs[:-1], errs[1:])]
     assert all(1.8 < o < 2.2 for o in orders), f"orders {orders} from errs {errs}"
+
+
+def test_schedule_independence_gate_catches_spurious_roots(outer_data):
+    """Past a fold the residual is not a correctness test.
+
+    Spurious roots satisfy it to 1e-15 while being wrong by factors of 50 to
+    2000. They are artefacts of the continuation path, so they move when the
+    ramp density changes; a genuine root does not. Measured: catches 1/1 of the
+    spurious successes found in a 120-draw R > R_MAX scan, at a 0.7%
+    false-positive rate in the safe region.
+    """
+    from jeans.fast import universal
+    # An R > R_MAX configuration that the ungated solver accepts with a
+    # machine-precision residual and a physically absurd u1 = r1/r0.
+    r1, M200, c = 33.47245, 1.5921e11, 13.6329
+    pb = _disc(2.5119e10, 1.2461, 0.17117)
+    rho1, M1 = outer_data(r1, M200, c, 1.0, pb, (0,))[:2]
+    assert universal.matching_ratio_of(r1, rho1, M1) > universal.R_MAX
+
+    loose = solve_spherical(r1, rho1, M1, Phi_b=pb, verify=False)
+    gated = solve_spherical(r1, rho1, M1, Phi_b=pb, verify=True)
+    if loose.success:
+        assert loose.residual < 1e-8, "fixture no longer exercises the failure"
+        assert r1 / loose.r0 > 200, "fixture no longer lands off-branch"
+        assert not gated.success, "the gate let a spurious root through"
+        assert "schedule_dependent" in gated.reason
+
+
+def test_schedule_independence_accepts_genuine_solutions(outer_data):
+    """The gate must not reject answers that are fine."""
+    for r1, M200, c in [(10, 1e12, 10.0), (30, 1e13, 7.0), (20, 5e12, 8.0)]:
+        rho1, M1 = outer_data(r1, M200, c, 1.0, mn_phi, (0,))[:2]
+        g = solve_spherical(r1, rho1, M1, Phi_b=mn_phi, verify=True)
+        u = solve_spherical(r1, rho1, M1, Phi_b=mn_phi, verify=False)
+        assert g.success, f"rejected a good solve at r1={r1}: {g.reason}"
+        assert g.r0 == pytest.approx(u.r0, rel=1e-12), "verify changed the answer"
