@@ -10,6 +10,8 @@ Run the whole file against the original to confirm it reproduces every defect:
 import numpy as np
 import pytest
 
+pytestmark = pytest.mark.slow
+
 import jeans
 from jeans.classes import CDM_profile
 from jeans.definitions import GN

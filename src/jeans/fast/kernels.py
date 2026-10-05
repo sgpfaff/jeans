@@ -241,3 +241,66 @@ def rk4_multipole_linear(r_nodes, h, L, rho_nodes, rho_half, src_nodes, src_half
                 mh = m
 
     return pp, mp, ph, mh
+
+
+@njit(cache=True)
+def rk4_multipole_trajectory(r_nodes, h, L, rho_nodes, rho_half,
+                             src_nodes, src_half, c):
+    """phi_L(r) over the whole grid for (particular + c * homogeneous).
+
+    Same march as rk4_multipole_linear, retaining the trajectory. Separate
+    rather than merged because the endpoint-only version runs inside the
+    root-find and should not pay for the storage.
+    """
+    n = r_nodes.shape[0] - 1
+    out = np.zeros(n + 1)
+    LL = float(L * (L + 1))
+    pp = 0.0
+    mp = 0.0
+    r_start = r_nodes[1]
+    ph = r_start ** L
+    mh = float(L) * r_start ** (L + 1)
+
+    for i in range(n):
+        rA = r_nodes[i]
+        rM = rA + 0.5 * h
+        rB = r_nodes[i + 1]
+        for which in range(2):
+            if which == 0:
+                p = pp
+                m = mp
+                use = 1.0
+            else:
+                if i == 0:
+                    continue
+                p = ph
+                m = mh
+                use = 0.0
+            if rA == 0.0:
+                k1p = 0.0
+                k1m = 0.0
+            else:
+                k1p = m / (rA * rA)
+                k1m = LL * p - rho_nodes[i] * p * rA * rA + use * src_nodes[i]
+            p2 = p + 0.5 * h * k1p
+            m2 = m + 0.5 * h * k1m
+            k2p = m2 / (rM * rM)
+            k2m = LL * p2 - rho_half[i] * p2 * rM * rM + use * src_half[i]
+            p3 = p + 0.5 * h * k2p
+            m3 = m + 0.5 * h * k2m
+            k3p = m3 / (rM * rM)
+            k3m = LL * p3 - rho_half[i] * p3 * rM * rM + use * src_half[i]
+            p4 = p + h * k3p
+            m4 = m + h * k3m
+            k4p = m4 / (rB * rB)
+            k4m = LL * p4 - rho_nodes[i + 1] * p4 * rB * rB + use * src_nodes[i + 1]
+            p += h / 6.0 * (k1p + 2.0 * k2p + 2.0 * k3p + k4p)
+            m += h / 6.0 * (k1m + 2.0 * k2m + 2.0 * k3m + k4m)
+            if which == 0:
+                pp = p
+                mp = m
+            else:
+                ph = p
+                mh = m
+        out[i + 1] = pp + c * ph
+    return out

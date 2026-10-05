@@ -66,7 +66,7 @@ class _Problem:
 
     __slots__ = ("r1", "rho1", "M1", "nodes", "half", "h",
                  "grid_n", "grid_h", "w", "upsilon", "n_eval",
-                 "_isotropic", "_col_n", "_col_h", "_cache")
+                 "_isotropic", "_col_n", "_col_h", "_cache", "extra_n", "extra_h")
 
     def __init__(self, r1, rho1, M1, n_steps, Phi_b, n_gl, half_range):
         self.r1 = float(r1)
@@ -78,6 +78,13 @@ class _Problem:
         self.upsilon = 1.0
         self.n_eval = 0
         self._cache = {}
+        # Shape feedback on the monopole. The axisymmetric solver puts
+        # sigma0^2 * sum_{L>0} phi_L(r) Z_L(theta) here, which turns the
+        # monopole's angular average into the effective one,
+        # m0 = <exp(-phi_b - sum_{L>0} phi_L Z_L)>. Without it the monopole
+        # never feels the shape and r0 is wrong by ~3.4e-3 for a disc.
+        self.extra_n = None
+        self.extra_h = None
         if Phi_b is None:
             self.grid_n = np.zeros((n_steps + 1, 1))
             self.grid_h = np.zeros((n_steps, 1))
@@ -108,6 +115,16 @@ class _Problem:
         hit = self._cache.get(sig0sq)
         if hit is not None:
             return hit
+        if self.extra_n is not None:
+            u = self.upsilon
+            gn = (self.grid_n if u == 1.0 else u * self.grid_n) + self.extra_n
+            gh = (self.grid_h if u == 1.0 else u * self.grid_h) + self.extra_h
+            out = (source_from_grid(gn, self.w, sig0sq),
+                   source_from_grid(gh, self.w, sig0sq))
+            if len(self._cache) > 64:
+                self._cache.clear()
+            self._cache[sig0sq] = out
+            return out
         if self._isotropic:
             inv = self.upsilon / sig0sq
             out = (self._col_n * inv, self._col_h * inv)
@@ -124,6 +141,12 @@ class _Problem:
 
     def set_upsilon(self, value):
         self.upsilon = value
+        self._cache.clear()
+
+    def set_shape_feedback(self, extra_n, extra_h):
+        """Install sigma0^2 * sum_{L>0} phi_L Z_L on the angular grid."""
+        self.extra_n = extra_n
+        self.extra_h = extra_h
         self._cache.clear()
 
 

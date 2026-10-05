@@ -47,6 +47,7 @@ res.r0, res.sigma0
 | `kernels.py` | Numba RK4 for the monopole and the linearised multipole system. Fixed step count, which is what keeps gradients smooth. |
 | `quadrature.py` | Fixed-node Gauss-Legendre in `cos(theta)` with cached harmonics, replacing adaptive `scipy.quad`. |
 | `solver.py` | The spherical solver: interpolation without baryons, continuation in the baryon amplitude with them. |
+| `solver2d.py` | The axisymmetric solver: nonlinear monopole alternating with a linear-response shape solve. |
 
 Measured against the package, all at matched accuracy:
 
@@ -55,6 +56,18 @@ Measured against the package, all at matched accuracy:
 | 1D, no baryons | 0.31 s | 0.03 ms | ~10,000x | 8e-5 |
 | 1D + Miyamoto-Nagai disc | 2.0 s | 37 ms | 59x | 2.0e-4 |
 | 1D + Hernquist spheroid | 0.30 s | 16 ms | 20x | 6.0e-5 |
+| 2D `L=[0,2]`, q0=0.8, no baryons | 6.2 s | 6.4 ms | 960x | 7.8e-5 |
+| 2D `L=[0,2]` + disc | 15.1 s | 39 ms | 390x | 2.0e-4 |
+| 2D `L=[0,2,4]` + disc | 30.4 s | 57 ms | 530x | 2.1e-4 |
+
+Those are monopole errors. The shape `phi_L` carries an extra error quadratic
+in the halo's own multipoles, because the L>0 sector is linearised about the
+spherical background: `phi_2` agrees to 4e-5 with a disc and 3e-3 at q0=0.8
+without one. `phi_4` is a different matter -- at the parameters tested
+`phi_2^2 = 2.6e-3` is the same size as `phi_4 = 2.5e-3`, so the dropped
+quadratic term is the *leading* contribution to L=4 rather than a correction
+to it, and L=4 comes out 3.3% low. Treat L=4 as indicative until a
+second-order or block-tridiagonal solve replaces the linearisation.
 
 The residual is the package's own error, not the solver's:
 `test_package_converges_toward_the_fast_solution` asserts that refining the
@@ -62,19 +75,27 @@ package's radial grid closes the gap as `O(N^-2)` with no floor.
 
 ## Status
 
-Stage 0 (defect fixes) and part of Stage 1 (1D reduced solver) are done. Still
-to come: the 2D linear-response solver, a JAX backend with implicit-function
-gradients, and the benchmark harness. The 2D kernel exists but is not yet
-wired up or validated.
+Stage 0 (defect fixes) and Stage 1 (1D and 2D reduced solvers) are done. Still
+to come: a JAX backend with implicit-function gradients, a second-order or
+block-tridiagonal treatment of L=4, and the benchmark harness.
 
 Nothing here has been offered upstream yet. The defect fixes are useful on their
 own and are the natural first contribution.
 
 ## Running the tests
 
+The suite splits into unit tests, which touch no reference profile, and
+comparisons against the package, which dominate the runtime because a single
+package build costs 0.3-30 s.
+
 ```sh
-PYTHONPATH=src python -m pytest tests/ -q
+PYTHONPATH=src python -m pytest -m "not slow" -q   # 8 tests, 0.9 s
+PYTHONPATH=src python -m pytest -q                 # 47 tests, 2.6 min
 ```
+
+Package references are memoised for the session in `tests/conftest.py`; only
+package output is cached, never the fast solvers', so a test cannot pass by
+comparing a cached value against itself.
 
 Confirm the defect tests reproduce against upstream:
 
