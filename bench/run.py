@@ -25,6 +25,7 @@ import jeans
 from jeans.classes import CDM_profile
 from jeans.definitions import GN
 from jeans.fast import universal
+from jeans.fast.outer import boundary_data as fast_boundary_data
 from jeans.fast.solver import solve_spherical
 from jeans.fast.solver2d import solve_axisymmetric
 
@@ -69,8 +70,19 @@ def _pkg_call(r1, M200, c, q0, pb, Ls):
     return lambda: jeans.isothermal(r1, M200, c, q0=q0, Phi_b=pb, L_list=list(Ls))
 
 
-def _outer(r1, M200, c, q0, pb, Ls):
+def _outer(r1, M200, c, q0, pb, Ls, fast=True):
+    """Outer-halo boundary data.
+
+    J_L is only needed when there are L>0 modes to drive, so the 1D cases skip
+    it entirely. An earlier version computed it unconditionally, which charged
+    the 1D end-to-end timings ~160 ms for a quantity they discard and made the
+    outer halo look like a bottleneck where it is not.
+    """
     o = CDM_profile(M200, c, q0=q0, Phi_b=pb)
+    if len(Ls) == 1:
+        return o.rho_sph_avg(r1), o.M_encl(r1), [0.0]
+    if fast:
+        return fast_boundary_data(o, r1, L_list=Ls)
     return (o.rho_sph_avg(r1), o.M_encl(r1),
             o.compute_potential_moments(r1, L_list=list(Ls),
                                         M_list=[0] * len(Ls)))
@@ -90,6 +102,9 @@ def section_cases():
         t_outer, bd = measure(lambda: _outer(r1, M200, c, q0, pb, Ls),
                               repeats=5, warmup=1, max_seconds=60.0)
         rho1, M1, JL = bd
+        t_outer_pkg, _ = measure(
+            lambda: _outer(r1, M200, c, q0, pb, Ls, fast=False),
+            repeats=3, warmup=1, max_seconds=90.0)
 
         if len(Ls) == 1:
             run = lambda: solve_spherical(r1, rho1, M1, Phi_b=pb)
@@ -103,7 +118,8 @@ def section_cases():
             min_s=t_fast.min_s + t_outer.min_s,
             q1_s=t_fast.q1_s + t_outer.q1_s,
             q3_s=t_fast.q3_s + t_outer.q3_s,
-            n=min(t_fast.n, t_outer.n), warmup=t_fast.warmup)
+            n=min(t_fast.n, t_outer.n), warmup=t_fast.warmup,
+            samples_s=[a + t_outer.median_s for a in t_fast.samples_s])
 
         acc = {
             "r0_rel": rel_err(R.r0, h.inner.r0),
@@ -123,6 +139,7 @@ def section_cases():
                        "baryons": "none" if pb is None else pb.__name__,
                        "L_list": list(Ls)},
             "package": t_pkg, "outer_halo": t_outer,
+            "outer_halo_package": t_outer_pkg,
             "fast_solver": t_fast, "fast_end_to_end": end_to_end,
             "speedup_solver_only": speedup_interval(t_pkg, t_fast),
             "speedup_end_to_end": speedup_interval(t_pkg, end_to_end),

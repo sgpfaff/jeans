@@ -90,7 +90,7 @@ def fig_speedup(d):
     a.set_xlim(5e-3, 2e5)
     a.legend(handles=[Patch(color=C["pkg"], label="package"),
                       Patch(color=C["fast"], label="reduced solver")],
-             loc="lower center", bbox_to_anchor=(0.5, 1.06), ncol=2)
+             loc="lower left", bbox_to_anchor=(0.0, 1.06), ncol=2)
     a.grid(axis="x", color=C["mute"], lw=0.5, alpha=0.6, zorder=0)
     a.set_axisbelow(True)
 
@@ -99,19 +99,23 @@ def fig_speedup(d):
     b.barh(y + 0.20, so, height=0.38, color=C["fast"],
            xerr=[so - so_lo, so_hi - so], error_kw=dict(ecolor="#10335A", lw=0.9, capsize=2))
     b.barh(y - 0.20, e2, height=0.38, color=C["e2e"])
-    for yy, v in zip(y, so):
-        b.text(v * 1.3, yy + 0.20, f"{v:,.0f}×", va="center", fontsize=7.5,
-               color="#10335A")
+    for yy, v, r in zip(y, so, rows):
+        # Spell the interval out: on a log axis the error bar is sub-pixel
+        # wherever the spread is a few per cent, which is most cases.
+        band = 100 * (r["speedup_solver_only"]["hi"] /
+                      r["speedup_solver_only"]["lo"] - 1.0)
+        b.text(v * 1.35, yy + 0.20, f"{v:,.0f}×  ±{band/2:.0f}%", va="center",
+               fontsize=7.2, color="#10335A")
     b.set_xscale("log")
     b.set_yticks(y)
     b.set_yticklabels([])
     b.set_xlabel("speed-up")
     b.set_title("(b) speed-up", loc="left")
-    b.set_xlim(1, max(so_hi) * 12)
+    b.set_xlim(1, max(so_hi) * 60)
     b.axvline(1.0, color=C["ref"], lw=0.8)
     b.legend(handles=[Patch(color=C["fast"], label="interior solve"),
                       Patch(color=C["e2e"], label="including outer halo")],
-             loc="lower center", bbox_to_anchor=(0.5, 1.06), ncol=2)
+             loc="lower left", bbox_to_anchor=(0.0, 1.06), ncol=2)
     b.grid(axis="x", color=C["mute"], lw=0.5, alpha=0.6, zorder=0)
     b.set_axisbelow(True)
     save(fig, "bench1_speedup.png")
@@ -124,10 +128,14 @@ def fig_pareto(cost, cases):
     for r in cases["cases"]:
         if r["name"] == "2D L=[0,2], no baryons":
             pkg_err["no baryons"] = (r["package"]["median_s"] * 1e3,
-                                     r["accuracy"]["r0_rel"])
+                                     r["accuracy"]["r0_rel"],
+                                     r["package"]["q1_s"] * 1e3,
+                                     r["package"]["q3_s"] * 1e3)
         if r["name"] == "2D L=[0,2] + disc":
             pkg_err["MN disc"] = (r["package"]["median_s"] * 1e3,
-                                  r["accuracy"]["r0_rel"])
+                                  r["accuracy"]["r0_rel"],
+                                  r["package"]["q1_s"] * 1e3,
+                                  r["package"]["q3_s"] * 1e3)
 
     for k, (label, col) in enumerate([("no baryons", C["good"]), ("MN disc", C["fast"])]):
         rows = cost["series"].get(label)
@@ -135,15 +143,25 @@ def fig_pareto(cost, cases):
             continue
         a = ax[k]
         t = np.array([r["time"]["median_s"] for r in rows]) * 1e3
+        q1 = np.array([r["time"]["q1_s"] for r in rows]) * 1e3
+        q3 = np.array([r["time"]["q3_s"] for r in rows]) * 1e3
         e = np.array([max(r["r0_rel_to_converged"], 1e-16) for r in rows])
         ns = [r["n_steps"] for r in rows]
-        a.loglog(t, e, "o-", color=col, ms=5, lw=1.4, zorder=3)
+        # Horizontal bars only: wall clock is stochastic and carries a measured
+        # interquartile range, while the accuracy axis is a deterministic
+        # computation that returns identical bits on a rerun. Drawing a vertical
+        # bar would invent an uncertainty that does not exist.
+        a.set_xscale("log")
+        a.set_yscale("log")
+        a.errorbar(t, e, xerr=[t - q1, q3 - t], fmt="o-", color=col, ms=5,
+                   lw=1.4, elinewidth=1.1, capsize=2.5, zorder=3)
         for ti, ei, n in zip(t, e, ns):
             a.annotate(f"{n}", (ti, ei), textcoords="offset points",
                        xytext=(5, 5), fontsize=6.8, color=col)
         if label in pkg_err:
-            pt, pe = pkg_err[label]
-            a.plot([pt], [pe], "s", color=C["pkg"], ms=7, zorder=4)
+            pt, pe, pq1, pq3 = pkg_err[label]
+            a.errorbar([pt], [pe], xerr=[[pt - pq1], [pq3 - pt]], fmt="s",
+                       color=C["pkg"], ms=7, elinewidth=1.1, capsize=2.5, zorder=4)
             a.annotate("package\n(default grid)", (pt, pe),
                        textcoords="offset points", xytext=(-10, -22),
                        fontsize=7.2, color=C["pkg"], ha="right")
@@ -177,6 +195,8 @@ def fig_gridref(d):
     ax[0].set_xlabel("package radial grid $N$")
     ax[0].set_ylabel(r"$|r_0^{\rm pkg}/r_0^{\rm fast} - 1|$")
     ax[0].set_title("(a) the gap closes with no floor", loc="left")
+    ax[0].text(0.03, 0.03, "deterministic: no timing involved", transform=ax[0].transAxes,
+               fontsize=6.6, color=C["ref"], style="italic")
     ax[0].legend(loc="lower left")
     ax[0].grid(color=C["mute"], lw=0.5, alpha=0.6)
     ax[0].set_axisbelow(True)
@@ -215,6 +235,8 @@ def fig_ladder(d):
     a.set_xlabel("relative finite-difference step $s$")
     a.set_ylabel(r"$d\log r_0\,/\,d\log M_{200}$")
     a.set_title("(a) the derivative", loc="left")
+    a.text(0.03, 0.03, "deterministic: no timing involved", transform=a.transAxes,
+           fontsize=6.6, color=C["ref"], style="italic")
     a.grid(color=C["mute"], lw=0.5, alpha=0.6)
     a.set_axisbelow(True)
     a.annotate("sign flips", xy=(3e-7, -0.341), xytext=(4e-4, -0.30),
@@ -245,25 +267,61 @@ def fig_ladder(d):
     save(fig, "bench4_ladder.png")
 
 
-# ------------------------------------------------------- measurement noise
+# ------------------------------------------------------- measurement scatter
 def fig_noise(d):
+    """Every timing sample, normalised to its own case median.
+
+    The error bars in fig_speedup are real but sub-pixel: a 2% interquartile
+    range on a log axis spanning seven decades is 0.03% of the axis width, so
+    they read as "no uncertainty was measured". This figure exists so the
+    scatter is actually visible. Each dot is one run.
+    """
     rows = d["cases"]
     names = [r["name"] for r in rows]
     y = np.arange(len(rows))[::-1]
-    pk = np.array([r["package"]["q3_s"] / r["package"]["q1_s"] - 1 for r in rows])
-    fa = np.array([r["fast_solver"]["q3_s"] / r["fast_solver"]["q1_s"] - 1 for r in rows])
+    rng = np.random.default_rng(1)
 
-    fig, ax = plt.subplots(figsize=(W1 + 1.2, 0.36 * len(rows) + 1.4))
-    ax.barh(y + 0.19, 100 * pk, height=0.36, color=C["pkg"], label="package")
-    ax.barh(y - 0.19, 100 * fa, height=0.36, color=C["fast"], label="reduced solver")
-    ax.set_yticks(y)
-    ax.set_yticklabels(names)
-    ax.set_xlabel("interquartile spread [% of median]")
-    ax.set_title("Measurement noise on a shared machine", loc="left")
-    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.04), ncol=2)
-    ax.set_xlim(0, 100 * max(pk.max(), fa.max()) * 1.12)
-    ax.grid(axis="x", color=C["mute"], lw=0.5, alpha=0.6)
-    ax.set_axisbelow(True)
+    fig, ax = plt.subplots(1, 2, figsize=(W2, 0.46 * len(rows) + 2.0),
+                           gridspec_kw={"width_ratios": [1.5, 1]})
+
+    a = ax[0]
+    for yy, r in zip(y, rows):
+        for key, off, col in (("package", 0.20, C["pkg"]),
+                              ("fast_solver", -0.20, C["fast"])):
+            t = r[key]
+            sm = np.array(t.get("samples_s") or [t["median_s"]], float)
+            ratio = sm / t["median_s"]
+            jit = rng.uniform(-0.055, 0.055, size=len(ratio))
+            a.plot(ratio, np.full_like(ratio, yy + off) + jit, "o", ms=3.4,
+                   color=col, alpha=0.75, mew=0)
+            a.plot([t["q1_s"] / t["median_s"], t["q3_s"] / t["median_s"]],
+                   [yy + off, yy + off], "-", color=col, lw=1.6, alpha=0.45,
+                   solid_capstyle="round", zorder=0)
+    a.axvline(1.0, color=C["ref"], lw=0.9)
+    a.set_yticks(y)
+    a.set_yticklabels(names)
+    a.set_xlabel("run time / median for that case")
+    a.set_title("(a) every sample, normalised per case", loc="left")
+    a.grid(axis="x", color=C["mute"], lw=0.5, alpha=0.6)
+    a.set_axisbelow(True)
+    a.legend(handles=[Patch(color=C["pkg"], label="package (5 runs)"),
+                      Patch(color=C["fast"], label="reduced solver (21 runs)")],
+             loc="lower center", bbox_to_anchor=(0.5, 1.05), ncol=2)
+
+    b = ax[1]
+    pk = np.array([100 * (r["package"]["q3_s"] / r["package"]["q1_s"] - 1) for r in rows])
+    fa = np.array([100 * (r["fast_solver"]["q3_s"] / r["fast_solver"]["q1_s"] - 1) for r in rows])
+    b.barh(y + 0.19, pk, height=0.36, color=C["pkg"])
+    b.barh(y - 0.19, fa, height=0.36, color=C["fast"])
+    for yy, v in zip(y, np.maximum(pk, fa)):
+        b.text(v + 0.6, yy, f"{v:.0f}%", va="center", fontsize=7, color=C["ref"])
+    b.set_yticks(y)
+    b.set_yticklabels([])
+    b.set_xlabel("interquartile spread [%]")
+    b.set_title("(b) spread", loc="left")
+    b.set_xlim(0, max(pk.max(), fa.max()) * 1.25)
+    b.grid(axis="x", color=C["mute"], lw=0.5, alpha=0.6)
+    b.set_axisbelow(True)
     save(fig, "bench5_noise.png")
 
 

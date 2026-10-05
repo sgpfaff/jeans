@@ -39,6 +39,11 @@ class Timing:
     q3_s: float
     n: int
     warmup: int
+    # Every sample, not just the summary. Keeping these is what lets a figure
+    # show the actual scatter: on a log axis spanning seven decades a 2%
+    # interquartile range is sub-pixel, so error bars alone silently read as
+    # "no uncertainty was measured".
+    samples_s: list = field(default_factory=list)
 
     @property
     def iqr_frac(self):
@@ -68,7 +73,8 @@ def measure(fn, repeats=7, warmup=1, max_seconds=120.0):
     n = len(samples)
     q1 = samples[max(0, int(0.25 * (n - 1)))]
     q3 = samples[min(n - 1, int(0.75 * (n - 1)))]
-    return Timing(statistics.median(samples), samples[0], q1, q3, n, warmup), out
+    return Timing(statistics.median(samples), samples[0], q1, q3, n, warmup,
+                  samples_s=samples), out
 
 
 def speedup_interval(slow: Timing, fast: Timing):
