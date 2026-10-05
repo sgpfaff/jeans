@@ -108,7 +108,9 @@ def compute_Mb(Phi_b, rmin, rmax, num=100):
         Phi_b_sph_avg_list = np.array([Phi_b_sph_avg_func(r) for r in r_list])
 
     else:
-        raise Exception("Case with num_sph_coords=%d not supported." % num_sph_coords)
+        raise Exception(
+            "Phi_b must take 1 or 2 arguments (r) or (r, theta); got %d." % num_variables
+        )
 
     # Check if Phi_b is nonzero
     if np.all(Phi_b_sph_avg_list < 0):

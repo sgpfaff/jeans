@@ -496,11 +496,16 @@ class profile:
     # Potentials
 
     def Phi(self, r, theta=None, Lmax=10):
-        if (self.sph_sym_flag) or (theta == None):
+        # D3: `theta == None` is an elementwise comparison once theta is an
+        # array, and range(Lmax+1) walks odd L that carry no solved moment.
+        if self.sph_sym_flag or (theta is None):
             return self.Phi_LM(r, 0) * Z(0, 0, 0, 0)
 
         else:
-            return np.sum([self.Phi_LM(r, L) * Z(L, 0, theta, 0) for L in range(Lmax + 1)], axis=0)
+            return np.sum(
+                [self.Phi_LM(r, L) * Z(L, 0, theta, 0) for L in range(0, Lmax + 1, 2)],
+                axis=0,
+            )
 
     def Phi_LM(self, r, L, M=0, **kwargs):
         rho_LM = self.rho_LM_interp(L, 0, **kwargs)
@@ -509,12 +514,14 @@ class profile:
     def Phi_dm(self, r, th, Lmax=10, **kwargs):
 
         # Handle different cases where r and/or theta are single numbers
-        if (np.ndim(r) == 0) and (np.ndim(r) == 0):
-            return self.Phi_dm(self, [r], [th], Lmax=Lmax, **kwargs)
+        # D3: these were passing `self` on top of the bound receiver, and the
+        # second guard tested r where it meant th.
+        if (np.ndim(r) == 0) and (np.ndim(th) == 0):
+            return self.Phi_dm([r], [th], Lmax=Lmax, **kwargs)
         elif np.ndim(r) == 0:
-            return self.Phi_dm(self, [r], th, Lmax=Lmax, **kwargs)
+            return self.Phi_dm([r], th, Lmax=Lmax, **kwargs)
         elif np.ndim(th) == 0:
-            return self.Phi_dm(self, r, [th], Lmax=Lmax, **kwargs)
+            return self.Phi_dm(r, [th], Lmax=Lmax, **kwargs)
         else:
             pass
 
@@ -527,7 +534,7 @@ class profile:
 
             # Calculate LM mode contribution
             Phi_old = np.array(Phi_tot)
-            Phi_tot += np.multiply.outer(potential.Phi_LM(rho_LM, r, L), Z(L, 0, theta, 0))
+            Phi_tot += np.multiply.outer(potential.Phi_LM(rho_LM, r, L), Z(L, 0, th, 0))
 
             if np.allclose(Phi_tot, Phi_old, rtol=1e-3, atol=1e-3):
                 break
@@ -879,7 +886,7 @@ class isothermal_profile:
         self.angular_moments_interp = interp1d(r_points, self.angular_moments_list, axis=0)
 
         # Flag for spherical symmetry if Phi_b only depends on r and only L=0 mode
-        self.sph_sym_flag = (self.num_Phi_b_variables == 1) & (self.L_list == [0])
+        self.sph_sym_flag = (self.num_Phi_b_variables == 1) & (list(self.L_list) == [0])
 
     # end __init__
 
@@ -1322,6 +1329,12 @@ class isothermal_profile:
         if self.angular_moments_set:
             self.update_angular_moments()
 
+        # D1: sph_sym_flag depends on L_list and on Phi_b, both of which
+        # update() can change. Recompute it here, not only in __init__, or
+        # every output accessor keeps reporting a spherically symmetric halo
+        # after nonspherical.relaxation raises L_list.
+        self.sph_sym_flag = (self.num_Phi_b_variables == 1) & (list(self.L_list) == [0])
+
     # end of update()
 
     def copy(self):
@@ -1499,6 +1512,8 @@ class CDM_profile:
                 self.M_b,
                 AC_prescription=AC_prescription,
                 Gnedin_params=Gnedin_params,
+                halo_type=halo_type,
+                gamma=getattr(self, "gamma", gamma),
             )
 
         # Spherically symmetric density profile
@@ -1632,7 +1647,7 @@ class CDM_profile:
     # Moment is int_r1^inf dx x^(1-L) rho_LM(x)
     def compute_potential_moments(self, r1, L_list=[0], M_list=[0]):
 
-        if M_list != [0]:
+        if any(M != 0 for M in M_list):
             raise Exception("M != 0 not supported.")
         else:
             pass

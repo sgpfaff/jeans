@@ -7,9 +7,31 @@ from .tools import timed
 # Generate profile object from inputs
 
 
+def _spherical_baryon_input(outer_halo, baryon_average):
+    """Pick the baryon potential handed to the spherical relaxation.
+
+    "exact"     -- pass Phi_b(r, theta) through, so the solver forms the
+                   rigorous m0 = <exp(-Phi_b/sigma0^2)>. Matches jeans.isothermal.
+    "spherical" -- pre-average the potential and pass Phi_b(r), giving
+                   m0 = exp(-<Phi_b>/sigma0^2). The original behaviour.
+    """
+    if baryon_average == "exact":
+        return outer_halo.Phi_b
+    elif baryon_average == "spherical":
+        return tools.compute_Phi_b_spherical(
+            outer_halo.M_b, 1e-6 * outer_halo.r200, outer_halo.r200
+        )
+    raise Exception(
+        "baryon_average=%r not found; use 'exact' or 'spherical'." % (baryon_average,)
+    )
+
+
 # Spherical isothermal Jeans model
 @timed
-def spherical(r1, *outer_halo_params, Phi_b=None, halo_type="NFW", gamma=0.3, **kwargs):
+def spherical(
+    r1, *outer_halo_params, Phi_b=None, halo_type="NFW", gamma=0.3,
+    baryon_average="exact", **kwargs
+):
 
     # CDM profile
     if r1 == 0:
@@ -22,12 +44,16 @@ def spherical(r1, *outer_halo_params, Phi_b=None, halo_type="NFW", gamma=0.3, **
         # CDM outer profile (spherical)
         outer_halo = CDM_profile(*outer_halo_params, q0=1, Phi_b=Phi_b, halo_type=halo_type, gamma=gamma, **kwargs)
 
-        # Compute spherically averaged potential from enclosed mass profile (computed within outer_halo)
-        Phi_b_sph = tools.compute_Phi_b_spherical(outer_halo.M_b, 1e-6 * outer_halo.r200, outer_halo.r200)
+        # D6: jeans.isothermal passes the full Phi_b, so its spherical step uses
+        # the rigorous m0 = <exp(-Phi_b/sigma0^2)>, while this path used
+        # m0 = exp(-<Phi_b>/sigma0^2). For an aspherical Phi_b the two differ by
+        # a Jensen gap -- up to ~1.8% in r0 for a Miyamoto-Nagai disc -- so
+        # jeans.spherical was not the L=[0] limit of jeans.isothermal.
+        # Default to the rigorous convention; the old one stays reachable.
+        Phi_b_in = _spherical_baryon_input(outer_halo, baryon_average)
 
-        # Spherical Jeans model (with spherically averaged potential)
-        # Matched onto spherical outer halo
-        inner_halo, success = sphmodel.relaxation(r1, outer_halo, Phi_b=Phi_b_sph, **kwargs)
+        # Spherical Jeans model matched onto the spherical outer halo
+        inner_halo, success = sphmodel.relaxation(r1, outer_halo, Phi_b=Phi_b_in, **kwargs)
 
         # Matching was successful
         if success:
@@ -41,7 +67,10 @@ def spherical(r1, *outer_halo_params, Phi_b=None, halo_type="NFW", gamma=0.3, **
 
 # Squashed Jeans model
 @timed
-def squashed(r1, *outer_halo_params, q0=1, Phi_b=None, halo_type="NFW", gamma=0.3, q_mode="smooth", **kwargs):
+def squashed(
+    r1, *outer_halo_params, q0=1, Phi_b=None, halo_type="NFW", gamma=0.3,
+    q_mode="smooth", baryon_average="exact", **kwargs
+):
 
     # CDM profile
     if r1 == 0:
@@ -53,12 +82,16 @@ def squashed(r1, *outer_halo_params, q0=1, Phi_b=None, halo_type="NFW", gamma=0.
         # CDM outer profile (spherical)
         outer_halo = CDM_profile(*outer_halo_params, q0=1, Phi_b=Phi_b, halo_type=halo_type, gamma=gamma, **kwargs)
 
-        # Compute spherically averaged potential from enclosed mass profile (computed within outer_halo)
-        Phi_b_sph = tools.compute_Phi_b_spherical(outer_halo.M_b, 1e-6 * outer_halo.r200, outer_halo.r200)
+        # D6: jeans.isothermal passes the full Phi_b, so its spherical step uses
+        # the rigorous m0 = <exp(-Phi_b/sigma0^2)>, while this path used
+        # m0 = exp(-<Phi_b>/sigma0^2). For an aspherical Phi_b the two differ by
+        # a Jensen gap -- up to ~1.8% in r0 for a Miyamoto-Nagai disc -- so
+        # jeans.spherical was not the L=[0] limit of jeans.isothermal.
+        # Default to the rigorous convention; the old one stays reachable.
+        Phi_b_in = _spherical_baryon_input(outer_halo, baryon_average)
 
-        # Spherical Jeans model (with spherically averaged potential)
-        # Matched onto spherical outer halo
-        inner_halo, success = sphmodel.relaxation(r1, outer_halo, Phi_b=Phi_b_sph, **kwargs)
+        # Spherical Jeans model matched onto the spherical outer halo
+        inner_halo, success = sphmodel.relaxation(r1, outer_halo, Phi_b=Phi_b_in, **kwargs)
 
         # Matching was successful
         if success:

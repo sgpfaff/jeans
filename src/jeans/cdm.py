@@ -200,7 +200,15 @@ def Einasto_profiles(*params, **kwargs):
 #########################################
 
 
-def AC_profiles(M200, c200, M_baryon, AC_prescription="Cautun", Gnedin_params=(1.6, 0.8)):
+def AC_profiles(
+    M200,
+    c200,
+    M_baryon,
+    AC_prescription="Cautun",
+    Gnedin_params=(1.6, 0.8),
+    halo_type="NFW",
+    gamma=0.3,
+):
     r"""
     Compute adiabatically contracted (AC) NFW profiles for a dark matter halo, including baryonic effects.
 
@@ -246,7 +254,16 @@ def AC_profiles(M200, c200, M_baryon, AC_prescription="Cautun", Gnedin_params=(1
     num_points = 1000
 
     # DM profile without AC
-    M_CDM = M_NFW(rho_s, rs)
+    # D2: this used to hardcode NFW, so Einasto+AC returned results identical
+    # to NFW+AC and halo_type/gamma were silently discarded. r200 above comes
+    # from the NFW converter, which is correct for either type since it depends
+    # only on M200 and the cosmology.
+    if halo_type == "NFW":
+        M_CDM = M_NFW(rho_s, rs)
+    elif halo_type == "Einasto":
+        M_CDM = M_Einasto(M200, c200, gamma, mass_concentration=True)
+    else:
+        raise Exception("halo_type=" + str(halo_type) + " not found.")
 
     # AC prescription following Cautun et al [1911.04557]
     if AC_prescription == "Cautun":
@@ -316,8 +333,22 @@ def AC_profiles(M200, c200, M_baryon, AC_prescription="Cautun", Gnedin_params=(1
     # Compute density rho(r) numerically from M(r):
     # Extrapolate beyond rmin and rmax using power law
     dlogM_dlogr = np.gradient(np.log(M_values[1:]), np.log(r_list[1:]))
-    log_rho = np.log(M_values[1:] / (4 * np.pi * r_list[1:] ** 3) * dlogM_dlogr)
-    log_rho_function = InterpolatedUnivariateSpline(np.log(r_list[1:]), log_rho, k=1, ext=0)
+    arg = M_values[1:] / (4 * np.pi * r_list[1:] ** 3) * dlogM_dlogr
+
+    # D2: a profile with finite total mass (Einasto) saturates in M(r), so
+    # dlogM/dlogr collapses to round-off noise across the outer tail and `arg`
+    # goes non-positive there. log() then returned NaN, which the spline
+    # propagated to every radius -- the reason Einasto+AC silently produced NaN
+    # once halo_type was actually honoured. Fit only the physical points; the
+    # k=1 spline with ext=0 extrapolates beyond them. NFW's M(r) never
+    # saturates, so for NFW this mask is empty and the result is unchanged.
+    good = np.isfinite(arg) & (arg > 0)
+    if not np.any(good):
+        raise Exception("AC error: density reconstruction left no valid points.")
+    log_rho = np.log(arg[good])
+    log_rho_function = InterpolatedUnivariateSpline(
+        np.log(r_list[1:][good]), log_rho, k=1, ext=0
+    )
 
     def rho_function(r):
         return np.exp(log_rho_function(np.log(r)))
