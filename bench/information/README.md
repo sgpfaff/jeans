@@ -1,5 +1,7 @@
 # Where is the information about the cross-section?
 
+**Status: the pipeline works, the numbers are not converged.**
+
 Ground truth is generated **by the model**, so there is no misspecification at
 all. Any failure to recover is information content or sampler behaviour, not a
 physics mismatch -- which is the thing the EAGLE run (`../eagle/`) could not
@@ -14,25 +16,31 @@ Milky-Way disc, `sigma/m = 0.5`), fitted under three likelihoods.
 | shape `q(r)` only | 0.527 +0.504 -0.240 | 0.5 | 1.412 |
 | **both** | **0.406 +0.134 -0.109** | 0.5 | **0.598** |
 
-**Density and shape carry essentially equal information** -- 1.404 against
-1.412. That was not what I expected; one seemed likely to dominate.
+> **These numbers are NOT converged. Read the warning below before using
+> them.**
 
-**Combining them is worth 2.35x, not sqrt(2).** Two independent measurements
-of equal precision would give 1.41. Getting 2.35 means they break a
-degeneracy rather than averaging: each one's `sigma/m` uncertainty is largely
-shared with `(M200, c)`, and the two share it differently. The nuisance
-parameters show it -- density alone pulls `c` to 12.1 and shape alone to 8.1
-against a truth of 10, while together they land on 10.8.
+The integrated autocorrelation time is tau ~ 12-15 against 150 post-burn
+steps, so **n_eff ~ 10-12 effective samples** in every chain. emcee's own
+diagnostic says so: "the chain is shorter than 50 times the integrated
+autocorrelation time". At ten effective samples the 16/84 percentiles are
+noise, and the following do NOT follow from this run:
 
-**Shape alone is the least biased**, 0.527 against 0.5.
+* that density and shape carry *equal* information. 1.404 against 1.412 is
+  indistinguishable here; the true values could be 1.0 and 2.0.
+* that the combination is worth *2.35x*. The factor is not measured.
 
-This is the gap between the two published approaches. X-Stream
-([2508.02666](https://arxiv.org/abs/2508.02666)) constrains the radial
-profile; Curve-Away ([2609.40057](https://arxiv.org/abs/2609.40057))
-constrains the shape. Neither can combine them, because neither has a model
-predicting both from a single `sigma/m`. This says the combination is worth
-substantially more than either alone -- which is the argument for the 2D
-machinery.
+What does survive: all three recover `sigma/m` within a factor of two of the
+truth, and the joint constraint is visibly tighter than either single
+observable (see `corner_information.png`, where the joint contour is enclosed
+by both). The ordering is probably real; nothing quantitative is.
+
+The shape-only posterior is also broad and structured, with 0.6% of samples
+near the upper `sigma/m` prior edge, so part of it may be prior-informed
+rather than data-informed.
+
+Getting this right needs roughly 3000 steps rather than 300, which is ten
+hours per fit at the current cost -- so the `r1` bracket caching below is a
+prerequisite, not an optimisation.
 
 ## Caveats
 
