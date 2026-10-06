@@ -42,7 +42,12 @@ def log_prob(p):
 
 if __name__ == "__main__":
     import emcee
-    from multiprocessing import Pool
+    import multiprocessing as mp
+    # SPAWN, not fork. JAX is multithreaded and multiprocessing forks by
+    # default on Linux; the combination deadlocks. It is a race rather than a
+    # certainty -- earlier runs in this project survived it -- which is
+    # exactly what makes it worth pinning down rather than retrying.
+    CTX = mp.get_context("spawn")
     print(f"[{WHICH}] truth: M200={IC.TRUTH['M200']:.2e} c={IC.TRUTH['c']} "
           f"sigma/m={IC.TRUTH['sigma_m']}  (r1={r1_t:.2f} kpc)", flush=True)
     t0=time.time(); lp = log_prob(np.array([LM0, 10.0, np.log10(0.5)]))
@@ -56,7 +61,7 @@ if __name__ == "__main__":
                          rng2.uniform(6, 15), rng2.uniform(-1.6, 0.1)])
         if np.isfinite(log_prob(cand)): seeds.append(cand)
     t0=time.time()
-    with Pool(8) as pool:
+    with CTX.Pool(8) as pool:
         s = emcee.EnsembleSampler(nw, 3, log_prob, pool=pool)
         s.run_mcmc(np.array(seeds), NSTEP, progress=False)
     print(f"  {NSTEP} steps in {time.time()-t0:.0f} s, acceptance "

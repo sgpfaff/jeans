@@ -59,7 +59,7 @@ def sigma_m_at(M200, c, r1):
     return CONV / (rho1 * (4.0 * res.sigma0 / np.sqrt(np.pi)) * T_AGE), res
 
 
-def r1_for(M200, c, target, n=14):
+def r1_for(M200, c, target, n=12):
     """sigma/m is monotone increasing in r1, so bisect -- but the upper end of
     the bracket cannot be fixed in advance.
 
@@ -77,7 +77,9 @@ def r1_for(M200, c, target, n=14):
     if slo is None or slo > target:
         return None, None
     hi, shi = lo, slo
-    for f in np.geomspace(0.006, 0.45, 26):
+    # 12 points, not 26: r1/rvir lands in [0.01, 0.2] for anything
+    # reasonable, and each extra point is a full solve.
+    for f in np.geomspace(0.006, 0.45, 12):
         r = f * rvir
         s, _ = sigma_m_at(M200, c, r)
         if s is None:

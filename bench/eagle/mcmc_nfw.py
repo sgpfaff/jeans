@@ -103,7 +103,12 @@ def log_prob(p):
 
 if __name__ == "__main__":
     import emcee
-    from multiprocessing import Pool
+    import multiprocessing as mp
+    # SPAWN, not fork: JAX is multithreaded and forking after touching it
+    # deadlocks. These scripts used the default fork and survived it, which is
+    # luck -- the identical pattern in bench/information hung three jobs for
+    # fifty minutes with no output before the timeout killed them.
+    CTX = mp.get_context("spawn")
     t0=time.time(); print("  timing one likelihood...", flush=True)
     lp,_ = log_prob(np.array([LM0, 6.0, 0.0, -1.0]))
     print(f"  one call: {time.time()-t0:.2f} s   logL={lp:.1f}", flush=True)
@@ -130,7 +135,7 @@ if __name__ == "__main__":
     p0 = np.array(seeds)
     print(f"  {nw} feasible starting points found in {tries} draws", flush=True)
     t0=time.time()
-    with Pool(26) as pool:
+    with CTX.Pool(26) as pool:
         s = emcee.EnsembleSampler(nw, nd, log_prob, pool=pool)
         s.run_mcmc(p0, nstep, progress=False)
     print(f"  sampled {nstep} steps in {time.time()-t0:.0f} s; "
