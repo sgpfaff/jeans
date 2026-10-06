@@ -232,3 +232,78 @@ def test_default_outer_pass_count_is_converged(outer_data):
     e_three = abs(three.r0 / ref.r0 - 1.0)
     assert e_def < 1e-9, f"default not converged: {e_def:.2e}"
     assert e_def < e_three / 50.0, f"n_outer=4 bought little: {e_three:.2e} -> {e_def:.2e}"
+
+
+# ------------------------------------------- validity of the linear shape
+def test_max_psi_is_reported_and_tracks_flattening(outer_data):
+    """A caller must be able to see where on the error curve its answer sits."""
+    r1, M200, c = 10.0, 1e12, 10.0
+    seen = []
+    for q0 in (0.9, 0.7, 0.5, 0.35):
+        rho1, M1, J_L = outer_data(r1, M200, c, q0, mn_phi, (0, 2))
+        R = solve_axisymmetric(r1, rho1, M1, J_L=J_L, L_list=(0, 2), Phi_b=mn_phi)
+        assert R.success, R.reason
+        assert np.isfinite(R.max_psi) and R.max_psi > 0
+        # psi = phi_2 Z_2 for a pure quadrupole, so the ratio is fixed by the
+        # harmonic normalisation on the solver's own nodes
+        ratio = R.max_psi / np.max(np.abs(R.phi_L[2]))
+        assert ratio == pytest.approx(0.6208, rel=2e-3), f"q0={q0}: {ratio}"
+        seen.append(R.max_psi)
+    assert all(b > a for a, b in zip(seen, seen[1:])), f"not monotone: {seen}"
+
+
+def test_max_psi_is_zero_without_higher_multipoles(outer_data):
+    r1, M200, c = 10.0, 1e12, 10.0
+    rho1, M1, _ = outer_data(r1, M200, c, 1.0, mn_phi, (0,))
+    R = solve_axisymmetric(r1, rho1, M1, L_list=(0,), Phi_b=mn_phi)
+    assert R.success and R.max_psi == 0.0 and R.linear_response_ok
+
+
+def test_absurd_shape_is_refused_rather_than_extrapolated(outer_data):
+    """Past PSI_HARD the error curve was never measured, so do not pretend."""
+    from jeans.fast.solver2d import PSI_HARD
+    r1, M200, c = 10.0, 1e12, 10.0
+    rho1, M1, J_L = outer_data(r1, M200, c, 0.5, mn_phi, (0, 2))
+    # x12 gives psi = 1.49 and otherwise converges, so this exercises
+    # "solved, but refused" rather than "failed anyway".
+    over = solve_axisymmetric(r1, rho1, M1, J_L=[J_L[0], J_L[1] * 12.0],
+                              L_list=(0, 2), Phi_b=mn_phi)
+    assert over.max_psi > PSI_HARD, f"fixture no longer exceeds it: {over.max_psi}"
+    assert not over.success
+    assert "outside_linear_response" in over.reason
+
+    # and the guard must not be over-eager: x8 is psi = 0.93, inside the
+    # range the error curve was measured over, so it must still succeed
+    under = solve_axisymmetric(r1, rho1, M1, J_L=[J_L[0], J_L[1] * 8.0],
+                               L_list=(0, 2), Phi_b=mn_phi)
+    assert under.max_psi < PSI_HARD
+    assert under.success, under.reason
+
+
+@pytest.mark.slow
+def test_linearisation_error_lives_in_the_shape_not_the_monopole(outer_data):
+    """The finding that set the thresholds, pinned.
+
+    Refining the comparison on both sides drives the r0 difference down by
+    orders of magnitude while the phi_2 difference stays put. So the flat
+    2e-4 in r0 is the comparison's own discretisation and the linearisation
+    error in the solved r0 is far below it; the shape carries the real error.
+    """
+    r1, M200, c, q0 = 12.0, 1e12, 10.0, 0.55
+    pb = mn_phi
+    import jeans
+    errs = {}
+    for n in (200, 800):
+        rho1, M1, J_L = outer_data(r1, M200, c, q0, pb, (0, 2))
+        f = solve_axisymmetric(r1, rho1, M1, J_L=J_L, L_list=(0, 2), Phi_b=pb,
+                               n_outer=8, n_steps=n)
+        h = jeans.isothermal(r1, M200, c, q0=q0, Phi_b=pb, L_list=[0, 2],
+                             r_grid=n)
+        assert f.success and h is not None and h.inner is not None
+        rr = 0.999 * r1
+        errs[n] = (abs(f.r0 / h.inner.r0 - 1.0),
+                   abs(f.phi_at(2, rr) / h.inner.phi(2, 0, rr) - 1.0))
+    assert errs[800][0] < errs[200][0] / 5.0, \
+        f"r0 difference did not converge away: {errs}"
+    assert errs[800][1] == pytest.approx(errs[200][1], rel=0.25), \
+        f"phi_2 difference is not resolution-independent: {errs}"

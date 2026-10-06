@@ -215,6 +215,70 @@ boundary evaluation costs it 90.7 s against 9.2 s for this one including JAX
 tracing. At 90 s a chain of 1e5 samples is about 100 days, so adiabatic
 contraction was unusable for inference before it was undifferentiable.
 
+## How far the linear shape sector actually goes
+
+`solver2d` linearises the L>0 sector about the spherical background. Its
+docstring used to quote "max |phi_2| ... below 0.272 over 1080
+configurations" as the validated range, without saying what exceeding it
+costs. Two things were wrong with that. 35% of a realistic prior exceeds it --
+over 230 converged configurations with `q0` from 0.4 to 0.95 the median is
+0.20 and the maximum 0.59, almost entirely driven by flat halos. And
+exceeding it turns out to cost nothing worth worrying about.
+
+Measured against the package's own relaxation, which builds its source as the
+exact angular integral of `exp(-phi_b - sum_L phi_L Z_L)` and so assumes no
+linearity, over 150 configurations spanning `max abs(phi_2)` from 0.02 to 0.94:
+
+| `max abs(phi_2)` | n | median err `r0` | median err `phi_2` |
+|---|---|---|---|
+| [0.00, 0.05) | 6 | 1.6e-4 | 1.1e-3 |
+| [0.15, 0.20) | 13 | 1.8e-4 | 1.7e-3 |
+| [0.30, 0.40) | 17 | 2.1e-4 | 3.0e-3 |
+| [0.50, 0.70) | 20 | 2.0e-4 | 5.0e-3 |
+| [0.70, 0.94] | 7 | 2.0e-4 | 7.3e-3 |
+
+There is no knee. A resolution ladder says why the `r0` column is flat:
+refining both sides together (`r_grid` = `n_steps` = 200, 400, 800, 1600)
+drives the `r0` difference 1.61e-4 to 3.82e-5 to 7.68e-6 to **6.52e-8**, while
+the `phi_2` difference sits at 4.95e-4, 5.05e-4, 5.06e-4, 5.07e-4. So the flat
+2e-4 was the comparison's own discretisation, and **the linearisation error in
+the solved `r0` and `sigma0` is below 1e-7** -- the monopole is simply
+indifferent to the shape amplitude (correlation of the `r0` error with
+`abs(phi_2)`: -0.03).
+
+The shape carries the only real error, and it is predictable:
+`err/abs(phi_2)` is constant at 9.3e-3 (p10 4.4e-3, p90 1.4e-2), the signature
+of the dropped quadratic term. At `abs(phi_2)` = 0.94 -- `q0` = 0.25, flatter
+than any real halo -- the shape is still right to 0.96%.
+
+`Result2D` therefore reports `max_psi` and a calibrated `shape_rel_error`
+rather than a pass/fail flag: at the point a flag would have fired the answer
+is good to 1%, and warning there would only teach people to ignore warnings.
+A hard refusal remains at `max_psi > 1.2`, which exists to avoid
+extrapolating a measured curve into unmeasured territory rather than to guard
+against any realistic halo. `bench/shape/` reproduces all of it.
+
+`L=4` is a separate matter, and structural. Its relative error is 1.7-6.9%
+(median 3.3%), does not shrink as the halo rounds, and does not move under
+refinement -- 3.20e-2, 3.22e-2, 3.23e-2 at `n_steps` = 200, 400, 800, and
+identical at `n_outer` = 4 and 12 -- while `r0` over the same ladder falls
+2.36e-4 to 2.48e-5. So it is the diagonal approximation: each `L` is marched
+independently, dropping the 2-4 coupling. Including the off-diagonal block
+would fix it, which is the same block-tridiagonal solve `L=6` needs.
+
+That is a relative error on a small quantity rather than a reason to drop
+`L=4`. `phi_4` is 10-20x smaller than `phi_2`, so the absolute contributions
+are about equally accurate (1.1e-3 against 1.7e-3 at `q0` = 0.5). Including
+`L=4` still improves the density; quoting `phi_4` as a precise amplitude does
+not.
+
+This also settles a question left open about 2D branch selection. The concern
+was that a fold found in 2D might be the linearisation failing rather than
+real physics, which would make a 2D certificate unassertable. The reported
+failures sit at `max_psi` >= 1.4, i.e. `abs(phi_2)` ~ 2.3 -- more than twice
+anything reachable even at `q0` = 0.25. That regime is not a grey area, it is
+unphysical.
+
 ## Status
 
 Defect fixes, the 1D and 2D reduced solvers, the fast outer halo, the

@@ -8,10 +8,61 @@ sector and the shape sector need different treatments:
     depth where a second-order expansion is still 17% wrong -- so the monopole
     is solved nonlinearly, with continuation in the baryon amplitude;
 
-  * the halo's own multipoles stay small (max |phi_2| = 0.063 at the fiducial
-    and below 0.272 over 1080 configurations), so linearising the L>0 sector
-    about the spherical background is accurate to the square of that, and the
-    shape follows from one particular plus one homogeneous march per mode.
+  * the halo's own multipoles stay small, so linearising the L>0 sector about
+    the spherical background is accurate to the square of that, and the shape
+    follows from one particular plus one homogeneous march per mode.
+
+How accurate, measured rather than asserted. The reference is the package's
+own relaxation, which builds its source as the exact angular integral of
+exp(-phi_b - sum_L phi_L Z_L) and Newton-iterates on it, so it assumes no
+linearity. Over 150 configurations with q0 swept from 0.95 down to 0.25,
+spanning max|phi_2| from 0.02 to 0.94:
+
+    max|phi_2|      n    median err r0    median err phi_2
+    [0.00, 0.05)    6        1.6e-4            1.1e-3
+    [0.15, 0.20)   13        1.8e-4            1.7e-3
+    [0.30, 0.40)   17        2.1e-4            3.0e-3
+    [0.50, 0.70)   20        2.0e-4            5.0e-3
+    [0.70, 0.94]    7        2.0e-4            7.3e-3
+
+The monopole column is flat, and a resolution ladder shows why: refining both
+sides together (r_grid = n_steps = 200, 400, 800, 1600) drives the r0
+difference 1.61e-4 -> 3.82e-5 -> 7.68e-6 -> 6.52e-8 while the phi_2 difference
+sits at 4.95e-4, 5.05e-4, 5.06e-4, 5.07e-4. So the flat 2e-4 in r0 was the
+comparison's own discretisation, and the linearisation error in the solved r0
+and sigma0 is below 1e-7 -- the monopole is indifferent to the shape
+amplitude (measured correlation of the r0 error with |phi_2|: -0.03).
+
+The shape carries the real error, and it is predictable: err/|phi_2| is
+constant at 9.3e-3 (p10 4.4e-3, p90 1.4e-2), which is the signature of the
+dropped quadratic term. At |phi_2| = 0.94 -- q0 = 0.25, flatter than any real
+halo -- the shape is still right to 0.96%.
+
+An earlier version of this docstring quoted "below 0.272 over 1080
+configurations" as a validated range. That was the largest value in a sample,
+not a boundary: 35% of a realistic prior exceeds it, and exceeding it costs
+nothing measurable in r0 and under 1% in the shape. See bench/shape/.
+
+L=4 is different in kind, and the difference is structural rather than a
+matter of resolution. Over 42 configurations with L = (0, 2, 4) the relative
+error in phi_4 is 1.7% to 6.9% (median 3.3%), it does NOT shrink as the halo
+rounds, and it does not move at all under refinement: at q0 = 0.8 it reads
+3.20e-2, 3.22e-2, 3.23e-2 at n_steps = 200, 400, 800, and is identical at
+n_outer = 4 and 12 to every printed digit, while the r0 error over the same
+ladder falls 2.36e-4 -> 6.68e-5 -> 2.48e-5. So it is neither discretisation
+nor an unconverged alternation. It is this solver's diagonal approximation:
+each L is marched independently, which drops the 2<->4 coupling, and that
+coupling supplies a larger share of phi_4 for rounder halos (the error is
+3.2% at q0 = 0.8 against 1.7% at q0 = 0.5, where the direct J_4 drive is
+stronger). Including the off-diagonal block would fix it, which is the same
+block-tridiagonal solve that L=6 needs.
+
+Read it as a relative error on a small quantity, not as a reason to drop L=4.
+phi_4 runs 10 to 20 times smaller than phi_2, so the ABSOLUTE contribution is
+about as accurate: at q0 = 0.5 with |phi_2| = 0.456 and |phi_4| = 0.0347 the
+two absolute errors are 1.7e-3 and 1.1e-3. Including L=4 still improves the
+density; what should not be done is quoting phi_4 itself as a precise
+amplitude.
 
 Linearising is required rather than merely convenient. Nonlinear shooting in
 the multipole amplitudes needs a ~5e4 cancellation against the homogeneous r^L
@@ -35,7 +86,27 @@ from .kernels import (rk4_monopole_full, rk4_multipole_linear,
 from .quadrature import N_GL_DEFAULT, gauss_legendre, harmonics, tabulate_baryons
 from .solver import GN, _Problem, _newton, _residual
 
-__all__ = ["Result2D", "solve_axisymmetric"]
+__all__ = ["Result2D", "solve_axisymmetric", "PSI_VALID", "PSI_HARD"]
+
+# The quantity linearised is psi = sum_{L>0} phi_L Z_L, the L>0 part of the
+# exponent in A_L = <Z_L exp(-phi_b - phi_dm)>, so a bound belongs on psi and
+# not on the coefficient phi_L. For L=2 alone max|psi| = 0.6208 max|phi_2| on
+# the solver's own grid (sqrt(5/4pi) = 0.6308 in the continuum; the nodes do
+# not include theta = 0).
+#
+# PSI_VALID is where the measured scatter puts the shape error at 1%, using
+# the p90 of err/|phi_2| = 1.44e-2 rather than its median. Nothing in a
+# realistic prior comes close: the largest max|psi| over 230 converged
+# configurations with q0 down to 0.4 was 0.37.
+PSI_VALID = 0.43
+
+# Beyond this the error curve has never been measured, so the solver refuses
+# rather than extrapolating. It is roughly twice the most extreme
+# configuration reached (max|phi_2| = 0.94 at q0 = 0.25, i.e. psi = 0.58).
+PSI_HARD = 1.2
+
+# err/|phi_2| from the same measurement, used for the reported estimate.
+SHAPE_ERR_PER_PHI = 9.3e-3
 
 _Z00 = 1.0 / np.sqrt(4.0 * np.pi)
 
@@ -44,7 +115,7 @@ class Result2D:
     """Solution of the axisymmetric model. phi_L are the package's multipoles."""
 
     def __init__(self, r0, sigma0, L_list, phi_L, r_nodes, success, reason,
-                 residual, ratio, n_eval, lag=np.nan):
+                 residual, ratio, n_eval, lag=np.nan, max_psi=np.nan):
         self.r0 = r0
         self.sigma0 = sigma0
         self.L_list = list(L_list)
@@ -63,6 +134,20 @@ class Result2D:
         # alternation lag. Measured for one case at n_outer = 1/2/3/4, the lag
         # runs 1.68e-4, 6.79e-8, 2.98e-11, 1.24e-14.
         self.lag = lag
+        # max |psi| over the solver's own (r, theta) grid, where
+        # psi = sum_{L>0} phi_L Z_L is the quantity the shape sector
+        # linearises. Always reported, so a caller can see where on the
+        # measured error curve its answer sits instead of having to guess.
+        self.max_psi = max_psi
+        # An estimate, not a bound: the measured err/|phi_2| has median
+        # 9.3e-3 with p10 4.4e-3 and p90 1.4e-2, so treat this as right to a
+        # factor of about 1.5 either way. It applies to the SHAPE; the error
+        # the linearisation puts into r0 and sigma0 is below 1e-7 and is not
+        # worth reporting.
+        self.shape_rel_error = (SHAPE_ERR_PER_PHI * max_psi / 0.6208
+                                if np.isfinite(max_psi) else np.nan)
+        self.linear_response_ok = (bool(max_psi <= PSI_VALID)
+                                   if np.isfinite(max_psi) else False)
         self.ratio = ratio
         self.n_residual_evals = n_eval
         self.rho0 = sigma0 ** 2 / (4.0 * np.pi * GN * r0 ** 2)
@@ -84,7 +169,9 @@ class Result2D:
     def __repr__(self):
         return (f"Result2D(r0={self.r0:.6g}, sigma0={self.sigma0:.6g}, "
                 f"L_list={self.L_list}, success={self.success}, "
-                f"residual={self.residual:.2e}, lag={self.lag:.2e})")
+                f"residual={self.residual:.2e}, lag={self.lag:.2e}, "
+                f"max_psi={self.max_psi:.3f}, "
+                f"shape_rel_error~{self.shape_rel_error:.1e})")
 
 
 def _angular_terms(grid, w, Z, phi00, sig0sq, r0sq):
@@ -197,6 +284,7 @@ def solve_axisymmetric(r1, rho1, M1, J_L=None, L_list=(0, 2), Phi_b=None,
     # shape feels the monopole through the background density. Three passes is
     # comfortably enough, and the Newton warm-starts each time.
     newton_res = np.nan
+    max_psi = 0.0        # stays 0 when L_list == [0]
     for outer in range(max(1, n_outer)):
 
         # -- monopole --
@@ -261,10 +349,21 @@ def solve_axisymmetric(r1, rho1, M1, J_L=None, L_list=(0, 2), Phi_b=None,
                 continue
             extra_n += sig0sq * np.outer(phi_L[L], Z[k])
             extra_h += sig0sq * np.outer(np.interp(half, nodes, phi_L[L]), Z[k])
+        # extra_n holds sigma0^2 * psi on the (r, theta) grid, so this is
+        # max|psi| without recomputing the harmonics.
+        max_psi = float(np.max(np.abs(extra_n))) / sig0sq
         P.set_shape_feedback(extra_n, extra_h)
 
     lag = float(np.max(np.abs(_residual(logp, P))))
+    reason = "ok" if ok else "not_converged"
+    if max_psi > PSI_HARD:
+        # Takes precedence over a convergence failure: past this the shape
+        # sector is far outside anything measured, so the alternation
+        # struggling is a symptom rather than the cause, and reporting the
+        # linearisation is the more useful answer.
+        ok = False
+        reason = ("outside_linear_response(max_psi=%.3f > %.3f)"
+                  % (max_psi, PSI_HARD))
     return Result2D(float(np.exp(0.5 * logp[0])), float(np.exp(0.5 * logp[1])),
-                    L_list, phi_L, nodes, bool(ok),
-                    "ok" if ok else "not_converged", newton_res, ratio,
-                    P.n_eval, lag=lag)
+                    L_list, phi_L, nodes, bool(ok), reason, newton_res, ratio,
+                    P.n_eval, lag=lag, max_psi=max_psi)
