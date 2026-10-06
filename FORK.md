@@ -51,6 +51,7 @@ res.r0, res.sigma0, res.phi_at(2, 9.9)
 | `solver.py` | The spherical solver: interpolation without baryons, continuation in the baryon amplitude with them. |
 | `solver2d.py` | The axisymmetric solver: nonlinear monopole alternating with a linear-response shape solve. |
 | `outer.py` | Outer-halo boundary data on fixed nodes, replacing two nested adaptive quadratures. |
+| `jaxsolver.py` | The differentiable backend: same algorithm, exact gradients by implicit differentiation, jit and vmap. |
 
 Measured against the package, all at matched accuracy:
 
@@ -96,10 +97,48 @@ package's radial grid closes the gap as `O(N^-2)` with no floor.
 
 ## Status
 
-Defect fixes, the 1D and 2D reduced solvers, the fast outer halo and the
-benchmark harness are done. Still to come: a JAX backend with
-implicit-function gradients, and a second-order or block-tridiagonal treatment
-of L=4.
+Defect fixes, the 1D and 2D reduced solvers, the fast outer halo, the
+benchmark harness and the differentiable 1D JAX backend are done. Still to
+come: the JAX outer halo beyond NFW, the 2D path in JAX, and a second-order or
+block-tridiagonal treatment of L=4.
+
+### The differentiable backend
+
+```python
+import jax, jax.numpy as jnp
+from jeans.fast.jaxsolver import solve_log      # (M200, c, r1, Md, a, b)
+
+p = jnp.array([1e12, 10.0, 10.0, 6e10, 3.0, 0.28])
+jax.jacfwd(solve_log)(p)                        # exact 2x6 Jacobian
+jax.vmap(solve_log)(P)                          # a whole ensemble
+```
+
+Pinned to one core, matched settings, against numba:
+
+| | JAX | numba |
+|---|-----|-------|
+| forward solve | 23.7 ms | 30.8 ms |
+| full 2x6 Jacobian | 26.5 ms (1.12x forward) | ~370 ms (12 FD solves) |
+| vmap(64), solve only | 5.4 ms/halo | 30.8 ms/halo serial |
+| vmap(64), solve + Jacobian | **6.0 ms/halo** | not available |
+
+Gradients agree with central finite differences of the numba solver -- a
+genuinely separate implementation -- to 3.5e-8 over twelve log-derivatives.
+Agreement on r0 is 1.7e-12.
+
+Three failure modes it deliberately does not have, each found by an
+adversarial verifier on a prototype that did:
+
+* **A masked failure poisons its own gradient.** `jnp.where(bad, nan, out)`
+  returns NaN values but *zero* tangents, which a sampler reads as "this halo
+  is insensitive to all six parameters" rather than "this halo failed". That
+  is the one error that silently corrupts a posterior. Both behaviours are
+  pinned by a test.
+* **`lax.custom_root` never checks it found a root.** At a non-converged point
+  it returns a clean-looking Jacobian, measured wrong by factors of 10 to 7000.
+  Masking is on by default rather than assuming convergence.
+* **Past a fold the residual is not a correctness test.** `solve_verified`
+  re-solves at twice the ramp density and requires agreement.
 
 Measurements and methodology: `bench/README.md`, and the
 [benchmark report](https://claude.ai/artifact/2yZYkZpa6fyeNns5qzMJsw).
