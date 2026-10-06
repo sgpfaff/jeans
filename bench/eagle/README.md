@@ -81,6 +81,7 @@ Four things went wrong first, each caught only by checking something else.
 | `mcmc_nfw.py` | joint posterior, uncontracted NFW outer halo |
 | `mcmc_contracted.py` | the same with Cautun contraction. This is the one to use |
 | `corner_plot.py` | corner plots from the saved chains |
+| `summary_figure.py` | the four runs on one axis -> `eagle_recovery_summary.png` |
 
 ```
 PYTHONPATH=../../src python mcmc_contracted.py SIDM1b 1 800    # ~8 min on 26 cores
