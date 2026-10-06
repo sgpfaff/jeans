@@ -59,26 +59,17 @@ def sigma_m_at(M200, c, r1):
     return CONV / (rho1 * (4.0 * res.sigma0 / np.sqrt(np.pi)) * T_AGE), res
 
 
-def r1_for(M200, c, target, n=12):
-    """sigma/m is monotone increasing in r1, so bisect -- but the upper end of
-    the bracket cannot be fixed in advance.
+_LAST_R1 = {}          # per-process; workers each handle many calls
 
-    For a given (M200, c) there is a MAXIMUM reachable sigma/m: past some r1
-    the matching problem has no solution at all, which is the existence
-    boundary showing up in cross-section space. Measured for M200 = 1e12,
-    c = 10 with a Milky-Way disc, sigma/m tops out near 1.2 at
-    r1/rvir ~ 0.13. So the upper bracket is found by walking out until either
-    the target is passed or the solve fails, and a target above the ceiling
-    returns None rather than silently clipping.
-    """
+
+def _bracket_r1(M200, c, target, n=12):
+    """The safe route: walk out, then bisect. ~24 solves. Used as a fallback."""
     rvir = float(JO.einasto_params(M200, c, 0.18)[2])
     lo = 0.004 * rvir
     slo, _ = sigma_m_at(M200, c, lo)
     if slo is None or slo > target:
         return None, None
     hi, shi = lo, slo
-    # 12 points, not 26: r1/rvir lands in [0.01, 0.2] for anything
-    # reasonable, and each extra point is a full solve.
     for f in np.geomspace(0.006, 0.45, 12):
         r = f * rvir
         s, _ = sigma_m_at(M200, c, r)
@@ -89,7 +80,7 @@ def r1_for(M200, c, target, n=12):
             break
         lo, slo = r, s
     if shi <= target:
-        return None, None               # target is above this halo's ceiling
+        return None, None
     for _ in range(n):
         mid = np.sqrt(lo * hi)
         s, _ = sigma_m_at(M200, c, mid)
@@ -101,8 +92,77 @@ def r1_for(M200, c, target, n=12):
     return r1, res
 
 
-def observables(res, r1):
-    """(rho_bar(R_RHO), q(R_Q)). Radii beyond r1 fall back to the outer halo."""
+def r1_for(M200, c, target, tol=2e-3, max_it=9):
+    """Solve sigma/m(r1) = target for r1.
+
+    sigma/m is monotone increasing in r1 AND smooth, so a secant in
+    (log r1, log sigma/m) converges in four or five solves from a decent
+    start, against about twenty-four for walk-then-bisect. Consecutive
+    likelihood calls differ by a hair, so the previous answer is a very good
+    start -- cached per worker process.
+
+    Every step is clamped to the feasible range, and a step that lands where
+    no solution exists is pulled back toward the last good point rather than
+    abandoned, because the existence boundary is a real cliff here: past some
+    r1 the matching problem has no solution at all. Anything that fails falls
+    back to the bracketed version, which cannot miss.
+    """
+    rvir = float(JO.einasto_params(M200, c, 0.18)[2])
+    lo_b, hi_b = np.log(0.003 * rvir), np.log(0.48 * rvir)
+    lt = np.log(target)
+
+    x0 = np.log(np.clip(_LAST_R1.get("r1", 0.05 * rvir),
+                        np.exp(lo_b), np.exp(hi_b)))
+    s0, res0 = sigma_m_at(M200, c, np.exp(x0))
+    if s0 is None:
+        return _bracket_r1(M200, c, target)
+    if abs(np.log(s0) - lt) < tol:
+        _LAST_R1["r1"] = np.exp(x0)
+        return np.exp(x0), res0
+
+    x1 = np.clip(x0 + (0.25 if np.log(s0) < lt else -0.25), lo_b, hi_b)
+    s1, res1 = sigma_m_at(M200, c, np.exp(x1))
+    if s1 is None:                       # stepped off the cliff
+        x1 = 0.5 * (x0 + x1)
+        s1, res1 = sigma_m_at(M200, c, np.exp(x1))
+        if s1 is None:
+            return _bracket_r1(M200, c, target)
+
+    for _ in range(max_it):
+        if abs(np.log(s1) - lt) < tol:
+            _LAST_R1["r1"] = np.exp(x1)
+            return np.exp(x1), res1
+        d = np.log(s1) - np.log(s0)
+        if abs(d) < 1e-12:
+            break
+        x2 = x1 - (np.log(s1) - lt) * (x1 - x0) / d
+        if not np.isfinite(x2):
+            break
+        x2 = float(np.clip(x2, lo_b, hi_b))
+        s2, res2 = sigma_m_at(M200, c, np.exp(x2))
+        if s2 is None:
+            x2 = 0.5 * (x1 + x2)
+            s2, res2 = sigma_m_at(M200, c, np.exp(x2))
+            if s2 is None:
+                return _bracket_r1(M200, c, target)
+        x0, s0 = x1, s1
+        x1, s1, res1 = x2, s2, res2
+
+    return _bracket_r1(M200, c, target)
+
+
+def observables(res, r1, M200=None, c=None):
+    """(rho_bar(R_RHO), q(R_Q)). Radii beyond r1 fall back to the outer halo.
+
+    M200/c describe THIS model's outer halo. They default to the truth only so
+    that generating the mock stays a one-liner; a likelihood must pass its own,
+    or every radius outside r1 returns the same number for every model in the
+    chain and those points carry no information at all.
+    """
+    if M200 is None:
+        M200 = TRUTH["M200"]
+    if c is None:
+        c = TRUTH["c"]
     th, w = np.polynomial.legendre.leggauss(16)
     th, w = np.arccos(np.clip(0.5 * (th + 1.0), -1, 1)), 0.5 * w
     rho = np.empty_like(R_RHO)
@@ -110,7 +170,7 @@ def observables(res, r1):
         if r <= r1:
             rho[i] = float(np.sum(w * np.array([res.rho(r, t) for t in th])))
         else:
-            rho[i] = float(JO.rho_sph_avg(r, TRUTH["M200"], TRUTH["c"], q0=Q0))
+            rho[i] = float(JO.rho_sph_avg(r, M200, c, q0=Q0))
     q = np.empty_like(R_Q)
     for i, r in enumerate(R_Q):
         if r >= r1:

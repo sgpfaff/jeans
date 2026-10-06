@@ -1,6 +1,7 @@
 # Where is the information about the cross-section?
 
-**Status: the pipeline works, the numbers are not converged.**
+**Status: the pipeline works; the numbers are preliminary and carry
+bootstrap errors.**
 
 Ground truth is generated **by the model**, so there is no misspecification at
 all. Any failure to recover is information content or sampler behaviour, not a
@@ -16,31 +17,36 @@ Milky-Way disc, `sigma/m = 0.5`), fitted under three likelihoods.
 | shape `q(r)` only | 0.527 +0.504 -0.240 | 0.5 | 1.412 |
 | **both** | **0.406 +0.134 -0.109** | 0.5 | **0.598** |
 
-> **These numbers are NOT converged. Read the warning below before using
-> them.**
+> **Preliminary: the chains are short. Bootstrap errors are quoted; read the
+> note below.**
 
-The integrated autocorrelation time is tau ~ 12-15 against 150 post-burn
-steps, so **n_eff ~ 10-12 effective samples** in every chain. emcee's own
-diagnostic says so: "the chain is shorter than 50 times the integrated
-autocorrelation time". At ten effective samples the 16/84 percentiles are
-noise, and the following do NOT follow from this run:
+Bootstrapping over walkers gives the sampling error on each width:
 
-* that density and shape carry *equal* information. 1.404 against 1.412 is
-  indistinguishable here; the true values could be 1.0 and 2.0.
-* that the combination is worth *2.35x*. The factor is not measured.
+| | width | bootstrap sigma |
+|---|---|---|
+| density | 1.404 | 0.173 |
+| shape | 1.412 | 0.121 |
+| both | 0.598 | 0.054 |
 
-What does survive: all three recover `sigma/m` within a factor of two of the
-truth, and the joint constraint is visibly tighter than either single
-observable (see `corner_information.png`, where the joint contour is enclosed
-by both). The ordering is probably real; nothing quantitative is.
+**Density and shape carry comparable information** -- the widths agree to
+about 15%. They are not demonstrably *equal*; an earlier version of this file
+said so, which claimed a precision the data does not have.
 
-The shape-only posterior is also broad and structured, with 0.6% of samples
-near the upper `sigma/m` prior edge, so part of it may be prior-informed
-rather than data-informed.
+**Combining them is worth 2.35 +- 0.36**, so sqrt(2) = 1.41, the value for two
+independent measurements of equal precision, is disfavoured at roughly
+2.6 sigma. The two observables therefore appear to break a degeneracy rather
+than simply average, which is visible in the nuisance parameters: density
+alone pulls `c` to 12.1 and shape alone to 8.1 against a truth of 10, while
+together they land on 10.8.
 
-Getting this right needs roughly 3000 steps rather than 300, which is ten
-hours per fit at the current cost -- so the `r1` bracket caching below is a
-prerequisite, not an optimisation.
+**Shape alone is the least biased**, 0.527 against 0.5.
+
+Health of the chains: the integrated autocorrelation time is tau ~ 12-15
+against 150 post-burn steps, so the run is about 11.5 tau long against
+emcee's guidance of 50 tau, with roughly 277 effective samples
+(n_steps x n_walkers / tau). The bootstrap above may therefore understate
+the error, since it resamples walkers that are correlated along their own
+length. Nothing here should be quoted without the longer run.
 
 ## Caveats
 

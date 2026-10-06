@@ -26,7 +26,7 @@ def log_prob(p):
     r1, res = IC.r1_for(10.0**logM200, c, 10.0**logsm)
     if r1 is None: return -np.inf
     try:
-        rho, q = IC.observables(res, r1)
+        rho, q = IC.observables(res, r1, 10.0**logM200, c)
     except Exception:
         return -np.inf
     if not np.all(np.isfinite(rho)): return -np.inf

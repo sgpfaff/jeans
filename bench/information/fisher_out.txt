@@ -1,0 +1,41 @@
+An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+
+=== disc   a=3.0 b=0.28 ===   sigma(log10 sigma/m), dex
+channel                       known  Md.10+Q0  +offsets
+rho                           0.075     0.140     0.140
+q                             0.519     0.609     0.898
+vc                            0.367     0.511     0.584
+sig0                            inf       inf       inf
+vc+sig0                       0.367     0.443     0.583
+rho+q                         0.073     0.101     0.135
+rho+q+vc+sig0                 0.071     0.077     0.104
+
+=== E5     a=1.4 b=1.4  ===   sigma(log10 sigma/m), dex
+channel                       known  Md.10+Q0  +offsets
+rho                           0.049     0.103     0.103
+q                             0.618     0.673     0.676
+vc                            0.199     0.207     0.208
+sig0                            inf       inf       inf
+vc+sig0                       0.198     0.204     0.206
+rho+q                         0.048     0.087     0.102
+rho+q+vc+sig0                 0.046     0.051     0.071
+
+=== round  a=0.5 b=2.3  ===   sigma(log10 sigma/m), dex
+channel                       known  Md.10+Q0  +offsets
+rho                           0.049     0.103     0.103
+q                             0.973     1.051     1.053
+vc                            0.164     0.240     0.241
+sig0                            inf       inf       inf
+vc+sig0                       0.143     0.151     0.194
+rho+q                         0.048     0.098     0.102
+rho+q+vc+sig0                 0.044     0.047     0.066
+
+=== sphere a=0.0 b=2.8  ===   sigma(log10 sigma/m), dex
+channel                       known  Md.10+Q0  +offsets
+rho                           0.050     0.105     0.105
+q                             2.240     2.254     5.996
+vc                            0.170     0.248     0.248
+sig0                            inf       inf       inf
+vc+sig0                       0.147     0.153     0.189
+rho+q                         0.049     0.104     0.104
+rho+q+vc+sig0                 0.045     0.048     0.066
