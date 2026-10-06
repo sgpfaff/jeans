@@ -274,3 +274,133 @@ def test_full_2d_chain_is_differentiable_including_q0():
         fd = (numba_log_r0(hi) - numba_log_r0(lo)) / (np.log1p(s) - np.log1p(-s))
         ad = jac[i] * p[i]
         assert abs(ad - fd) < 1e-6 + 1e-5 * abs(fd), f"param {i}: {ad} vs {fd}"
+
+
+# ------------------------------------------------- Einasto and contraction
+# Tolerances here are deliberately asymmetric. Against an exact reference
+# (closed form, or adaptive quadrature with Richardson extrapolation) the
+# requirement is machine precision. Against the PACKAGE the requirement is
+# loose, because the package is the approximate side: it splines the
+# spherically averaged baryon potential on 100 points and differentiates the
+# spline, and recovers rho from M by np.gradient on a 1000-point grid.
+# Measured against adaptive quadrature at r = 2, 5, 10, 20, 40 kpc, this
+# implementation is accurate to 2.7e-11 .. 1.3e-7 while the package's M_b is
+# accurate to 4.3e-6 .. 8.9e-5.
+
+def _mn_jnp(Md, a, b):
+    return lambda r, th: -GN * Md / jnp.sqrt(
+        r ** 2 * jnp.sin(th) ** 2
+        + (a + jnp.sqrt(b ** 2 + r ** 2 * jnp.cos(th) ** 2)) ** 2)
+
+
+def _mn_np(Md, a, b):
+    return lambda r, th: -GN * Md / np.sqrt(
+        r ** 2 * np.sin(th) ** 2
+        + (a + np.sqrt(b ** 2 + r ** 2 * np.cos(th) ** 2)) ** 2)
+
+
+def test_einasto_matches_the_package_to_machine_precision():
+    from jeans.cdm import M_Einasto, rho_Einasto
+    from jeans.fast import jaxouter as JO
+    M200, c, alpha = 1e12, 10.0, 0.18
+    rs = np.array([2.0, 5.0, 10.0, 20.0, 40.0])
+    rho_m2, r_m2, r200 = JO.einasto_params(M200, c, alpha)
+    pk_rho = rho_Einasto(M200, c, alpha, mass_concentration=True)
+    pk_M = M_Einasto(M200, c, alpha, mass_concentration=True)
+    for r in rs:
+        assert float(JO.einasto_rho(r, rho_m2, r_m2, alpha)) == pytest.approx(
+            float(pk_rho(r)), rel=1e-12)
+        assert float(JO.einasto_mass(r, M200, c, alpha)) == pytest.approx(
+            float(pk_M(r)), rel=1e-12)
+    # the normalisation is the defining property, so check it separately
+    assert float(JO.einasto_mass(float(r200), M200, c, alpha)) == pytest.approx(
+        M200, rel=1e-12)
+
+
+def test_baryon_mass_beats_the_package_against_exact_quadrature():
+    """M_b = r^2/G d<Phi_b>/dr, by autodiff rather than by splining."""
+    from scipy.integrate import quad
+    from jeans.tools import compute_Mb
+    from jeans.fast import jaxouter as JO
+    Md, a, b = 5e10, 2.5, 0.4
+    pj, pn = _mn_jnp(Md, a, b), _mn_np(Md, a, b)
+    r200 = float(JO.einasto_params(1e12, 10.0, 0.18)[2])
+    pk = compute_Mb(pn, 1e-10 * r200, 1e2 * r200)
+
+    def avg(r):
+        return 0.5 * quad(lambda th: pn(r, th) * np.sin(th), 0, np.pi,
+                          epsabs=1e-15, epsrel=1e-13, limit=400)[0]
+
+    for r in (2.0, 5.0, 10.0, 20.0):
+        prev = ref = None
+        for h in (r * 1e-2, r * 5e-3, r * 2.5e-3):
+            d = (avg(r + h) - avg(r - h)) / (2 * h)
+            if prev is not None:
+                ref = r ** 2 / GN * (d + (d - prev) / 3.0)   # Richardson
+            prev = d
+        mine = abs(float(JO.mb_spherical(pj, r)) / ref - 1.0)
+        theirs = abs(float(pk(r)) / ref - 1.0)
+        assert mine < 1e-6, f"r={r}: {mine:.2e}"
+        assert mine < theirs, f"r={r}: mine {mine:.2e} not better than {theirs:.2e}"
+
+
+def test_cautun_does_not_reduce_to_the_uncontracted_profile():
+    """At zero baryon mass the Cautun factor is 0.861, not 1.
+
+    M_CDM there is the total-matter profile and the prescription removes the
+    cosmological baryon fraction, so AC-on and AC-off are different models of
+    the same halo rather than a small correction to one. Worth pinning,
+    because it is the first thing that looks like a bug and is not.
+    """
+    from jeans.fast import jaxouter as JO
+    M_cdm = lambda r: jnp.asarray(1.0)
+    zero = lambda r: jnp.asarray(0.0)
+    f = float(JO.ac_mass(10.0, M_cdm, zero, "Cautun"))
+    assert f == pytest.approx(0.45 + 0.38 * 1.16 ** 0.53, rel=1e-12)
+    assert f == pytest.approx(0.8611, abs=1e-4)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("presc", ["Cautun", "Gnedin"])
+def test_adiabatic_contraction_matches_the_package(presc):
+    from jeans.cdm import AC_profiles
+    from jeans.tools import compute_Mb
+    from jeans.fast import jaxouter as JO
+    M200, c, Md, a, b = 1e12, 10.0, 5e10, 2.5, 0.4
+    pj, pn = _mn_jnp(Md, a, b), _mn_np(Md, a, b)
+    r200 = float(JO.einasto_params(M200, c, 0.18)[2])
+    pk_Mb = compute_Mb(pn, 1e-10 * r200, 1e2 * r200)
+    _, pk_M = AC_profiles(M200, c, pk_Mb, AC_prescription=presc)
+    rho_s, r_s = JO.nfw_params(M200, c)
+    M_cdm = lambda r: JO.nfw_mass(r, rho_s, r_s)
+    M_b = lambda r: JO.mb_spherical(pj, r)
+    for r in (2.0, 5.0, 10.0, 20.0, 40.0):
+        mine = float(JO.ac_mass(r, M_cdm, M_b, presc, r200))
+        # loose: the package's M_b spline feeds straight into this
+        assert mine == pytest.approx(float(pk_M(r)), rel=2e-3)
+
+
+@pytest.mark.slow
+def test_contracted_boundary_gradients_reach_every_halo_parameter():
+    """Gradients must survive Einasto, contraction and the squashing together."""
+    from jeans.fast import jaxouter as JO
+    pj = _mn_jnp(5e10, 2.5, 0.4)
+
+    def f(p):
+        rho1, M1, J_L = JO.boundary_data(
+            p[0], p[1], 10.0, q0=p[2], L_list=(0, 2),
+            halo_type="Einasto", alpha=p[3],
+            AC_prescription="Cautun", Phi_b=pj)
+        return jnp.array([jnp.log(rho1), jnp.log(M1), J_L[1]])
+
+    p0 = jnp.array([1e12, 10.0, 0.8, 0.18])
+    jac = jax.jacfwd(f)(p0)
+    assert bool(jnp.all(jnp.isfinite(jac))), "non-finite Jacobian"
+    for k in range(4):
+        best = np.inf
+        for h in (1e-4, 1e-5, 1e-6):
+            d = jnp.zeros(4).at[k].set(h * abs(p0[k]))
+            fd = (f(p0 + d) - f(p0 - d)) / (2 * h * abs(p0[k]))
+            best = min(best, float(jnp.max(jnp.abs(fd - jac[:, k])
+                                           / (jnp.abs(jac[:, k]) + 1e-30))))
+        assert best < 1e-6, f"parameter {k}: best agreement with FD {best:.2e}"

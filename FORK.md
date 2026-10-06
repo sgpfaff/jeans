@@ -6,8 +6,12 @@ A working fork of [dark-physics/jeans](https://github.com/dark-physics/jeans)
 defects found while validating the package, and add reduced solvers fast and
 smooth enough for Bayesian inference from extragalactic stellar streams.
 
-No new physics. The model is theirs; this is an implementation of the same
-equations by a different numerical route, plus bug fixes.
+The model is theirs. This solves the same equations by a different numerical
+route, fixes defects found while validating them, and adds two results about
+the model that the implementation made visible: an exact existence criterion
+with baryons, and a branch criterion for the matching problem, which is
+multi-valued. Neither changes the physics; both change which answer you get
+out of it.
 
 Background and measurements: **[Fast Differentiable SIDM Halos](https://claude.ai/artifact/MeerL1uT1moD3YUd4jXik8)**.
 
@@ -53,7 +57,7 @@ res.r0, res.sigma0, res.phi_at(2, 9.9)
 | `solver2d.py` | The axisymmetric solver: nonlinear monopole alternating with a linear-response shape solve. |
 | `outer.py` | Outer-halo boundary data on fixed nodes, replacing two nested adaptive quadratures. |
 | `jaxsolver.py` | The differentiable backend: same algorithm, exact gradients by implicit differentiation, jit and vmap. |
-| `jaxouter.py` | Closed-form differentiable boundary data, so gradients reach `M200`, `c` and `q0`. |
+| `jaxouter.py` | Closed-form differentiable boundary data: NFW or Einasto, optional adiabatic contraction, constant flattening. Gradients reach `M200`, `c`, `q0` and the Einasto index. |
 
 Measured against the package, all at matched accuracy:
 
@@ -159,6 +163,38 @@ The `u1 < 22.5441` fast path is not a theorem -- a Plummer sphere at
 `b/r1 = 3` puts the first fold at 22.33819 -- but every counterexample found
 requires `R > R_MAX`, so it is applied only when `R < R_MAX` and the exact
 determinant scan runs otherwise. Full discussion in the `branch.py` docstring.
+
+## The outer halo, differentiably
+
+`jaxouter.py` reproduces `CDM_profile`'s dispatch -- NFW or Einasto, optionally
+contracted by the Cautun or Gnedin prescription, squashed by a constant `q0` --
+as one traced expression. Three things the package computes numerically are
+exact here, and each was costing smoothness rather than only speed:
+
+| quantity | package | here |
+|---|---|---|
+| baryon enclosed mass `M_b(r)` | spline of the averaged potential on 100 points, differentiated | fixed-node angular average, radial derivative by autodiff |
+| contracted density | `np.gradient` of `log M` on a 1000-point grid, then splined | `M'(r)/4 pi r^2` by autodiff of the closed-form mass |
+| Gnedin initial radius | `find_ri` iterated to a tolerance, raising after 1000 steps | the same fixed point under `lax.custom_root` |
+
+Measured against adaptive quadrature with Richardson extrapolation, `M_b` here
+is accurate to 2.7e-11 at 2 kpc and 1.3e-7 at 40 kpc, where the package's
+spline is accurate to 8.9e-5 and 4.3e-6. Einasto matches the package's own
+closed forms to 5e-15 in density and 7e-15 in mass, with `M(r200)/M200 = 1` to
+twelve digits. Gradients in `M200`, `c`, `q0` and the Einasto index `alpha`
+agree with finite differences to about 1e-10, on a plateau flat across three
+step sizes. `jax.scipy.special.gammainc` turns out to be differentiable in its
+*order* as well as its argument, which is what makes `alpha` inferable rather
+than merely settable.
+
+Adiabatic contraction is not a small correction. Over a realistic halo+disc
+prior at `r1` = 5-30 kpc, switching it on moves the dark-matter density by a
+median **-11.5%** (Cautun) or **-14.0%** (Gnedin), spanning -18.5% to +14%,
+and the sign depends on the configuration. Part of that is bookkeeping rather
+than contraction: at zero baryon mass the Cautun factor is
+`0.45 + 0.38 * 1.16**0.53 = 0.861`, not 1, because `M_CDM` there is the
+total-matter profile and the prescription removes the cosmological baryon
+fraction. AC-on and AC-off are different models of the same halo.
 
 ## Status
 
