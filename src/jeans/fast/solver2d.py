@@ -44,7 +44,7 @@ class Result2D:
     """Solution of the axisymmetric model. phi_L are the package's multipoles."""
 
     def __init__(self, r0, sigma0, L_list, phi_L, r_nodes, success, reason,
-                 residual, ratio, n_eval):
+                 residual, ratio, n_eval, lag=np.nan):
         self.r0 = r0
         self.sigma0 = sigma0
         self.L_list = list(L_list)
@@ -53,6 +53,16 @@ class Result2D:
         self.success = success
         self.reason = reason
         self.residual = residual
+        # Newton residual and alternation lag are different numbers and were
+        # previously conflated. The outer loop installs pass-k shape feedback
+        # as its last statement, so a residual evaluated after the loop scores
+        # logp -- which solves the pass-(k-1) equations -- against the pass-k
+        # ones. That measures how much the alternation has left to go, not
+        # whether Newton converged. Reported separately: `residual` is the
+        # Newton residual at the solve that produced r0, `lag` is the
+        # alternation lag. Measured for one case at n_outer = 1/2/3/4, the lag
+        # runs 1.68e-4, 6.79e-8, 2.98e-11, 1.24e-14.
+        self.lag = lag
         self.ratio = ratio
         self.n_residual_evals = n_eval
         self.rho0 = sigma0 ** 2 / (4.0 * np.pi * GN * r0 ** 2)
@@ -73,7 +83,8 @@ class Result2D:
 
     def __repr__(self):
         return (f"Result2D(r0={self.r0:.6g}, sigma0={self.sigma0:.6g}, "
-                f"L_list={self.L_list}, success={self.success})")
+                f"L_list={self.L_list}, success={self.success}, "
+                f"residual={self.residual:.2e}, lag={self.lag:.2e})")
 
 
 def _angular_terms(grid, w, Z, phi00, sig0sq, r0sq):
@@ -116,7 +127,7 @@ def _angular_terms(grid, w, Z, phi00, sig0sq, r0sq):
 
 def solve_axisymmetric(r1, rho1, M1, J_L=None, L_list=(0, 2), Phi_b=None,
                        n_steps=200, n_gl=N_GL_DEFAULT, half_range=True,
-                       n_ramp=16, n_outer=3, tol=1e-11):
+                       n_ramp=16, n_outer=4, tol=1e-11):
     """Solve the axisymmetric isothermal Jeans model matched at r1.
 
     Parameters
@@ -132,7 +143,13 @@ def solve_axisymmetric(r1, rho1, M1, J_L=None, L_list=(0, 2), Phi_b=None,
         Even multipoles, starting with 0.
     n_outer : int
         Passes over (monopole, shape). The sectors couple only weakly -- the
-        monopole feels the shape at second order -- so this converges fast.
+        monopole feels the shape at second order -- so this converges fast:
+        the measured per-pass contraction is 3e-3 to 4e-4 away from a fold.
+        The default is 4 rather than 3 because the third pass still leaves up
+        to 4.0e-7 relative error in r0 (median 2.6e-9 over 150 realistic
+        cases) and up to 2.6e-3 near a fold, where the contraction degrades
+        toward 0.5; the fourth costs one extra Newton and buys three to four
+        orders of magnitude.
 
     Returns
     -------
@@ -179,6 +196,7 @@ def solve_axisymmetric(r1, rho1, M1, J_L=None, L_list=(0, 2), Phi_b=None,
     # the effective angular average, which is second order in phi_{L>0}; the
     # shape feels the monopole through the background density. Three passes is
     # comfortably enough, and the Newton warm-starts each time.
+    newton_res = np.nan
     for outer in range(max(1, n_outer)):
 
         # -- monopole --
@@ -204,6 +222,10 @@ def solve_axisymmetric(r1, rho1, M1, J_L=None, L_list=(0, 2), Phi_b=None,
             logp, ok = _newton(logp, P, tol=tol)
         if not ok:
             break
+
+        # Scored against the feedback logp actually solved against, i.e.
+        # before this pass installs its own. This is the Newton residual.
+        newton_res = float(np.max(np.abs(_residual(logp, P))))
 
         r0sq, sig0sq = np.exp(logp[0]), np.exp(logp[1])
         s_n, s_h = P.sources(sig0sq)
@@ -241,7 +263,8 @@ def solve_axisymmetric(r1, rho1, M1, J_L=None, L_list=(0, 2), Phi_b=None,
             extra_h += sig0sq * np.outer(np.interp(half, nodes, phi_L[L]), Z[k])
         P.set_shape_feedback(extra_n, extra_h)
 
-    residual = float(np.max(np.abs(_residual(logp, P))))
+    lag = float(np.max(np.abs(_residual(logp, P))))
     return Result2D(float(np.exp(0.5 * logp[0])), float(np.exp(0.5 * logp[1])),
                     L_list, phi_L, nodes, bool(ok),
-                    "ok" if ok else "not_converged", residual, ratio, P.n_eval)
+                    "ok" if ok else "not_converged", newton_res, ratio,
+                    P.n_eval, lag=lag)

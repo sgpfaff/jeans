@@ -160,14 +160,25 @@ def test_spherical_outer_halo_with_no_baryons_has_no_shape(outer_data):
 
 
 def test_monopole_reduces_to_the_one_dimensional_solver(outer_data):
-    """L_list=[0] must reproduce solve_spherical exactly."""
+    """L_list=[0] must reproduce the 1D solver.
+
+    Compared against method="ramp" because that is what solve_axisymmetric
+    itself runs; solve_spherical now defaults to the bracketed inversion. The
+    two 1D methods are checked against each other in test_branch.py, and the
+    bracketed answer is additionally checked against exhaustive root
+    enumeration there, so this stays a test of the 2D code path rather than a
+    second comparison of branch-selection strategies.
+    """
     from jeans.fast.solver import solve_spherical
     r1, M200, c = 10, 1e12, 10.0
     rho1, M1, JL = outer_data(r1, M200, c, 1.0, mn_phi, (0,))
-    a = solve_spherical(r1, rho1, M1, Phi_b=mn_phi)
+    a = solve_spherical(r1, rho1, M1, Phi_b=mn_phi, method="ramp", verify=False)
     b = solve_axisymmetric(r1, rho1, M1, J_L=JL, L_list=(0,), Phi_b=mn_phi)
     assert b.r0 == pytest.approx(a.r0, rel=1e-12)
     assert b.sigma0 == pytest.approx(a.sigma0, rel=1e-12)
+    # and the bracketed default must land on the same root here
+    d = solve_spherical(r1, rho1, M1, Phi_b=mn_phi)
+    assert d.r0 == pytest.approx(a.r0, rel=1e-8)
 
 
 def test_rejects_odd_multipoles():
@@ -178,3 +189,46 @@ def test_rejects_odd_multipoles():
 def test_requires_monopole_first():
     with pytest.raises(ValueError, match="must start with 0"):
         solve_axisymmetric(10.0, 1e7, 1e11, L_list=(2, 4))
+
+
+def test_residual_and_alternation_lag_are_reported_separately(outer_data):
+    """`residual` must be the Newton residual, not the outer-alternation lag.
+
+    The outer loop installs pass-k shape feedback as its last statement, so a
+    residual evaluated after the loop scores logp -- which solves the
+    pass-(k-1) equations -- against the pass-k ones. That number shrinks by
+    three orders of magnitude per pass and reads like a convergence
+    guarantee, which it is not: it says how much the alternation has left to
+    go. Newton itself converges to tol on every pass.
+    """
+    r1, M200, c = 10.0, 1e12, 10.0
+    rho1, M1, J_L = outer_data(r1, M200, c, 0.8, mn_phi, (0, 2))
+
+    lags, res = [], []
+    for n in (1, 2, 3, 4):
+        r = solve_axisymmetric(r1, rho1, M1, J_L=J_L, L_list=(0, 2),
+                               Phi_b=mn_phi, n_outer=n)
+        assert r.success, r.reason
+        lags.append(r.lag)
+        res.append(r.residual)
+
+    assert all(x < 1e-10 for x in res), f"Newton did not converge: {res}"
+    assert all(b < a for a, b in zip(lags, lags[1:])), f"lag not falling: {lags}"
+    assert lags[0] > 1e-5 and lags[-1] < 1e-9, f"lag range {lags[0]:.1e} {lags[-1]:.1e}"
+    assert lags[0] / res[0] > 1e6, "the two numbers are not distinguishable here"
+
+
+def test_default_outer_pass_count_is_converged(outer_data):
+    """n_outer=3 left up to 4e-7 in r0; the default is 4."""
+    r1, M200, c = 10.0, 1e12, 10.0
+    rho1, M1, J_L = outer_data(r1, M200, c, 0.8, mn_phi, (0, 2))
+    ref = solve_axisymmetric(r1, rho1, M1, J_L=J_L, L_list=(0, 2),
+                             Phi_b=mn_phi, n_outer=8)
+    default = solve_axisymmetric(r1, rho1, M1, J_L=J_L, L_list=(0, 2),
+                                 Phi_b=mn_phi)
+    three = solve_axisymmetric(r1, rho1, M1, J_L=J_L, L_list=(0, 2),
+                               Phi_b=mn_phi, n_outer=3)
+    e_def = abs(default.r0 / ref.r0 - 1.0)
+    e_three = abs(three.r0 / ref.r0 - 1.0)
+    assert e_def < 1e-9, f"default not converged: {e_def:.2e}"
+    assert e_def < e_three / 50.0, f"n_outer=4 bought little: {e_three:.2e} -> {e_def:.2e}"

@@ -114,6 +114,15 @@ def seed(r1, rho1, M1, GN=4.302e-6):
     When no no-baryon solution exists the ratio is clamped just inside the
     branch endpoint: with baryons the existence boundary moves, so a
     configuration can be solvable even when its Phi_b = 0 counterpart is not.
+
+    The clamp revives the seed but not the solve. Measured over 400 draws with
+    R > R_MAX it returns a seed every time, and the continuation that follows
+    converges on 3.5% of them -- because no seed can help there. The ramp's
+    first stage IS the baryon-free problem, which has no solution above R_MAX,
+    so the path the continuation wants to follow does not exist at its own
+    starting point and no value of n_ramp changes that. Those configurations
+    are reached instead by jeans.fast.branch.solve_bracketed, which does not
+    continue anything.
     """
     out = solve(r1, rho1, M1, GN=GN)
     if out is None:

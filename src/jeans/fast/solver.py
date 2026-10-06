@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from . import universal
+from . import branch, universal
 from .kernels import rk4_monopole, rk4_monopole_full, source_from_grid
 from .quadrature import N_GL_DEFAULT, tabulate_baryons
 
@@ -223,7 +223,7 @@ def _newton(logp, P, tol=1e-11, max_iter=60):
 
 def solve_spherical(r1, rho1, M1, Phi_b=None, n_steps=200, n_gl=N_GL_DEFAULT,
                     half_range=True, n_ramp=16, trajectory=False, tol=1e-11,
-                    verify=True, verify_rtol=1e-6):
+                    verify=True, verify_rtol=1e-6, method="bracket"):
     """Solve the spherical isothermal Jeans model matched at r1.
 
     Parameters
@@ -236,16 +236,36 @@ def solve_spherical(r1, rho1, M1, Phi_b=None, n_steps=200, n_gl=N_GL_DEFAULT,
     n_steps : int
         RK4 steps. Fixed, never adapted. Self-convergence against a 9600-step
         reference is 4.1e-6 at 200 steps and 3.3e-9 at 1200.
+    method : {"bracket", "ramp", "ramp+schedule"}
+        How the branch is selected.
+
+        "bracket" (default) inverts the problem by a bracketed monotone search
+        and performs no continuation at all. On the density-matched curve the
+        matching residual runs monotonically from -log(3R) at u1 -> 0 up to
+        log(R_fold/R) at the first fold, so it changes sign at most once on the
+        physical sheet and bisection cannot reach another branch. Checked
+        against exhaustive, path-independent root enumeration on 300 targets:
+        236 both found the same root to a worst relative difference of 3.9e-12,
+        64 agreed there was none, 0 disagreements, and no target had more than
+        one root on the physical sheet.
+
+        It is also the cheapest option -- median 0.018 s against 0.044 s for the
+        ramp and 0.128 s for the ramp with the schedule screen -- and the only
+        one that covers R > R_MAX, where the ramp has no starting point at all.
+
+        "ramp" runs the continuation and then the exact branch certificate.
+        "ramp+schedule" is the earlier behaviour, kept for comparison; its
+        screen is a filter rather than a proof and costs a second solve.
     n_ramp : int
-        Continuation stages in the baryon amplitude. 16 gave 0 spurious roots
-        in 314/314 cases; 8 gave 0.32% and 4 gave 1.27%.
+        Continuation stages for the "ramp" methods. No number of stages fixes
+        R > R_MAX: the first stage IS the baryon-free problem, which has no
+        solution there, so those configurations are lost rather than wrong.
+        Over 2889 fold-prior draws that do have a solution the ramp reached
+        6.2% of the R > R_MAX cases, and n_ramp=128 did no better.
     verify : bool
-        Re-solve at twice the ramp density and require the two to agree. Past
-        a fold the residual is useless as a correctness test -- spurious roots
-        satisfy it to 1e-15 -- but they are artefacts of the continuation path,
-        so they move when the schedule changes while a genuine root does not.
-        Costs one extra solve and is the only check found that works; see
-        _schedule_independent.
+        Screen the result of a "ramp" method -- the exact branch certificate
+        for "ramp", schedule independence for "ramp+schedule". Ignored by
+        "bracket", which is constructive and has nothing left to check.
 
     Returns
     -------
@@ -266,8 +286,26 @@ def solve_spherical(r1, rho1, M1, Phi_b=None, n_steps=200, n_gl=N_GL_DEFAULT,
             _attach(res, r1, None, n_steps, n_gl, half_range)
         return res
 
-    # ---- with baryons: seed on the universal curve, then ramp ------------
+    # ---- with baryons ----------------------------------------------------
     P = _Problem(r1, rho1, M1, n_steps, Phi_b, n_gl, half_range)
+
+    if method == "bracket":
+        br = branch.solve_bracketed(P)
+        res = SphericalResult(
+            br.r0, br.sigma0, br.success, br.reason, np.nan, ratio, br.n_eval,
+            rho0=(br.sigma0 ** 2 / (4.0 * np.pi * GN * br.r0 ** 2)
+                  if br.success else np.nan))
+        if br.success:
+            res.residual = float(np.max(np.abs(_residual(
+                np.array([2.0 * np.log(br.r0), 2.0 * np.log(br.sigma0)]), P))))
+            if trajectory:
+                _attach(res, r1, Phi_b, n_steps, n_gl, half_range)
+        return res
+    if method not in ("ramp", "ramp+schedule"):
+        raise ValueError("method must be 'bracket', 'ramp' or 'ramp+schedule';"
+                         " got %r" % (method,))
+
+    # seed on the universal curve, then ramp
     logp = universal.seed(r1, rho1, M1, GN=GN)
     if logp is None:
         return SphericalResult(np.nan, np.nan, False, "no_seed", ratio=ratio)
@@ -295,7 +333,7 @@ def solve_spherical(r1, rho1, M1, Phi_b=None, n_steps=200, n_gl=N_GL_DEFAULT,
     sigma0 = float(np.exp(0.5 * logp[1]))
     reason = "ok" if ok else "not_converged"
 
-    if ok and verify:
+    if ok and verify and method == "ramp+schedule":
         agree, other = _schedule_independent(
             r1, rho1, M1, Phi_b, n_steps, n_gl, half_range, n_ramp, tol,
             r0, verify_rtol)
@@ -303,6 +341,16 @@ def solve_spherical(r1, rho1, M1, Phi_b=None, n_steps=200, n_gl=N_GL_DEFAULT,
             ok = False
             reason = "schedule_dependent_root(r0=%.6g at n_ramp=%d)" % (
                 other, 2 * n_ramp)
+    elif ok and verify:
+        # The exact certificate: free whenever the root is inside the
+        # fast-path bound, otherwise it walks the matched curve down to the
+        # regular core and requires the determinant sign to hold.
+        Pc = _Problem(r1, rho1, M1, n_steps, Phi_b, n_gl, half_range)
+        good, why = branch.certify(Pc, r0, sigma0)
+        P.n_eval += Pc.n_eval
+        if not good:
+            ok = False
+            reason = "off_physical_sheet(%s)" % why
 
     res = SphericalResult(r0, sigma0, ok, reason,
                           residual, ratio, P.n_eval,

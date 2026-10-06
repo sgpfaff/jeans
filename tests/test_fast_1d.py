@@ -148,37 +148,39 @@ def test_package_converges_toward_the_fast_solution(pkg_spherical, outer_data):
     assert all(1.8 < o < 2.2 for o in orders), f"orders {orders} from errs {errs}"
 
 
-def test_schedule_independence_gate_catches_spurious_roots(outer_data):
+def test_schedule_independence_gate_catches_spurious_roots():
     """Past a fold the residual is not a correctness test.
 
-    Spurious roots satisfy it to 1e-15 while being wrong by factors of 50 to
-    2000. They are artefacts of the continuation path, so they move when the
-    ramp density changes; a genuine root does not. Measured: catches 1/1 of the
-    spurious successes found in a 120-draw R > R_MAX scan, at a 0.7%
-    false-positive rate in the safe region.
-    """
-    from jeans.fast import universal
-    # An R > R_MAX configuration that the ungated solver accepts with a
-    # machine-precision residual and a physically absurd u1 = r1/r0.
-    r1, M200, c = 33.47245, 1.5921e11, 13.6329
-    pb = _disc(2.5119e10, 1.2461, 0.17117)
-    rho1, M1 = outer_data(r1, M200, c, 1.0, pb, (0,))[:2]
-    assert universal.matching_ratio_of(r1, rho1, M1) > universal.R_MAX
+    This configuration is taken from a measured campaign: the 16-stage ramp
+    lands on the third sheet at u1 = 2211 with a residual of 2.1e-13, while
+    the physical root is at u1 = 11.0 -- an r0 wrong by a factor of 201.
 
-    loose = solve_spherical(r1, rho1, M1, Phi_b=pb, verify=False)
-    gated = solve_spherical(r1, rho1, M1, Phi_b=pb, verify=True)
-    if loose.success:
-        assert loose.residual < 1e-8, "fixture no longer exercises the failure"
-        assert r1 / loose.r0 > 200, "fixture no longer lands off-branch"
-        assert not gated.success, "the gate let a spurious root through"
-        assert "schedule_dependent" in gated.reason
+    It used to be a constructed R > R_MAX case guarded by ``if loose.success``,
+    which quietly became a no-op once the seed path changed and the ramp began
+    failing outright on it. Nothing here is guarded, so if the fixture stops
+    exercising the failure the test says so rather than passing.
+    """
+    r1, rho1, M1 = 14.497472, 6.764072e+05, 2.026979e+10
+    pb = _disc(1.669606e+11, 1.431099, 0.614668)
+
+    loose = solve_spherical(r1, rho1, M1, Phi_b=pb, method="ramp", verify=False)
+    assert loose.success, "fixture no longer converges"
+    assert loose.residual < 1e-10, "fixture no longer has a clean residual"
+    assert r1 / loose.r0 > 2000, "fixture no longer lands off-branch"
+
+    gated = solve_spherical(r1, rho1, M1, Phi_b=pb, method="ramp+schedule",
+                            verify=True)
+    assert not gated.success, "the gate let a spurious root through"
+    assert "schedule_dependent" in gated.reason
 
 
 def test_schedule_independence_accepts_genuine_solutions(outer_data):
     """The gate must not reject answers that are fine."""
     for r1, M200, c in [(10, 1e12, 10.0), (30, 1e13, 7.0), (20, 5e12, 8.0)]:
         rho1, M1 = outer_data(r1, M200, c, 1.0, mn_phi, (0,))[:2]
-        g = solve_spherical(r1, rho1, M1, Phi_b=mn_phi, verify=True)
-        u = solve_spherical(r1, rho1, M1, Phi_b=mn_phi, verify=False)
+        g = solve_spherical(r1, rho1, M1, Phi_b=mn_phi,
+                            method="ramp+schedule", verify=True)
+        u = solve_spherical(r1, rho1, M1, Phi_b=mn_phi,
+                            method="ramp", verify=False)
         assert g.success, f"rejected a good solve at r1={r1}: {g.reason}"
         assert g.r0 == pytest.approx(u.r0, rel=1e-12), "verify changed the answer"

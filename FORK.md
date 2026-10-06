@@ -1,10 +1,10 @@
 # About this fork
 
 A working fork of [dark-physics/jeans](https://github.com/dark-physics/jeans)
-(Tulin & Smith-Orlik, [arXiv:2511.10765](https://arxiv.org/abs/2511.10765)) with
-two goals: fix defects found while validating the package, and add reduced
-solvers fast and smooth enough for Bayesian inference from extragalactic
-stellar streams.
+(Bautista, Robertson, Sagunski, Smith-Orlik & Tulin,
+[arXiv:2511.10765](https://arxiv.org/abs/2511.10765)) with two goals: fix
+defects found while validating the package, and add reduced solvers fast and
+smooth enough for Bayesian inference from extragalactic stellar streams.
 
 No new physics. The model is theirs; this is an implementation of the same
 equations by a different numerical route, plus bug fixes.
@@ -48,10 +48,12 @@ res.r0, res.sigma0, res.phi_at(2, 9.9)
 | `universal.py` | The parameter-free interior solution and the no-baryon matching, which is an interpolation rather than a root-find. Carries the exact existence criterion `R < 1.2615266`. |
 | `kernels.py` | Numba RK4 for the monopole and the linearised multipole system. Fixed step count, which is what keeps gradients smooth. |
 | `quadrature.py` | Fixed-node Gauss-Legendre in `cos(theta)` with cached harmonics, replacing adaptive `scipy.quad`. |
-| `solver.py` | The spherical solver: interpolation without baryons, continuation in the baryon amplitude with them. |
+| `solver.py` | The spherical solver: interpolation without baryons, a bracketed monotone inversion with them. |
+| `branch.py` | Branch selection. The matching problem is multi-valued; this decides which root is physical, and supplies the exact existence criterion with baryons. |
 | `solver2d.py` | The axisymmetric solver: nonlinear monopole alternating with a linear-response shape solve. |
 | `outer.py` | Outer-halo boundary data on fixed nodes, replacing two nested adaptive quadratures. |
 | `jaxsolver.py` | The differentiable backend: same algorithm, exact gradients by implicit differentiation, jit and vmap. |
+| `jaxouter.py` | Closed-form differentiable boundary data, so gradients reach `M200`, `c` and `q0`. |
 
 Measured against the package, all at matched accuracy:
 
@@ -94,6 +96,52 @@ second-order or block-tridiagonal solve replaces the linearisation.
 The residual is the package's own error, not the solver's:
 `test_package_converges_toward_the_fast_solution` asserts that refining the
 package's radial grid closes the gap as `O(N^-2)` with no floor.
+
+## Branch selection
+
+The matching problem has more than one root, and past a fold the residual stops
+being a correctness test: a measured case returns an `r0` 201 times too small
+with a residual of 2.1e-13. This is the classical isothermal spiral -- `R` is
+the reciprocal Milne homology variable, the folds are the classical locus
+`u_M + v_M = 3`, and they space out as `exp(2*pi/sqrt(7)) = 10.75`. For the
+dark-matter-only case the multi-valuedness is already in the literature
+([Robertson et al. 2021](https://arxiv.org/abs/2009.07844), Appendix A).
+
+What is here is the criterion with baryons, and a solver that cannot reach the
+wrong branch. The reduced map `(u1, Lam) -> (R, mu)` is explicit, so folds are
+exactly where its Jacobian determinant vanishes, and two monotonicity results
+make the inversion fully bracketable. `solve_spherical` now defaults to that
+bracketed inversion.
+
+Measured on 4000 draws from a stream-inference prior and 4000 from a
+fold-enriched prior, against ground truth from exhaustive, path-independent
+root enumeration:
+
+| | wrong answers | caught by the certificate | caught by schedule independence | median cost |
+|---|---|---|---|---|
+| plain Newton | 3.8% / 10.0% | - | - | 0.006 s |
+| 16-stage ramp | 0.125% / 0.300% | 5/5, 12/12 | 5/5, 11/12 | 0.044 s |
+| ramp + schedule screen | - | 0 false positives | 1 and 20 false positives | 0.128 s |
+| **bracketed (default)** | cannot mis-branch | - | - | **0.018 s** |
+
+Two things worth knowing beyond the error rate.
+
+**The existence criterion is exact and cheap.** A solution exists iff
+`1/3 < R < R_fold(mu; shape)`, which generalises the no-baryon `R < R_MAX`.
+The lower bound is the `u1 -> 0` limit of the map and is new here; it is what
+rules out heavily baryon-dominated configurations.
+
+**Continuation loses solutions it cannot reach.** Above `R_MAX` the ramp's
+first stage is the baryon-free problem, which has no solution, so the path does
+not exist at its own starting point. Over 2889 fold-prior draws that do have a
+solution, the ramp reached 6.2% of the `R > R_MAX` cases and `n_ramp=128` did
+no better. These are silent coverage losses rather than wrong answers, and the
+bracketed solver recovers them.
+
+The `u1 < 22.5441` fast path is not a theorem -- a Plummer sphere at
+`b/r1 = 3` puts the first fold at 22.33819 -- but every counterexample found
+requires `R > R_MAX`, so it is applied only when `R < R_MAX` and the exact
+determinant scan runs otherwise. Full discussion in the `branch.py` docstring.
 
 ## Status
 
