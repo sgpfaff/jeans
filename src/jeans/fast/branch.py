@@ -57,8 +57,8 @@ needs no continuation at all. Checked against exhaustive, path-independent root
 enumeration on 300 targets: 236 found the same root to a worst relative
 difference of 3.9e-12, 64 agreed there was none, 0 disagreements, and no target
 had more than one root on the physical sheet. It is also the cheapest option
-(median 0.018 s, against 0.044 s for the ramp and 0.128 s for the ramp with a
-schedule-independence screen) and the only one that covers R > R_MAX.
+(13.0 ms, against 25.7 ms for the ramp and 70.9 ms for the ramp with a
+schedule-independence screen, measured in one process pinned to one core) and the only one that covers R > R_MAX.
 """
 import numpy as np
 

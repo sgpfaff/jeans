@@ -117,12 +117,29 @@ Measured on 4000 draws from a stream-inference prior and 4000 from a
 fold-enriched prior, against ground truth from exhaustive, path-independent
 root enumeration:
 
-| | wrong answers | caught by the certificate | caught by schedule independence | median cost |
-|---|---|---|---|---|
-| plain Newton | 3.8% / 10.0% | - | - | 0.006 s |
-| 16-stage ramp | 0.125% / 0.300% | 5/5, 12/12 | 5/5, 11/12 | 0.044 s |
-| ramp + schedule screen | - | 0 false positives | 1 and 20 false positives | 0.128 s |
-| **bracketed (default)** | cannot mis-branch | - | - | **0.018 s** |
+| | wrong answers | caught by the certificate | caught by schedule independence |
+|---|---|---|---|
+| plain Newton | 3.8% / 10.0% | - | - |
+| 16-stage ramp | 0.125% / 0.300% | 5/5, 12/12 | 5/5, 11/12 |
+| ramp + schedule screen | - | 0 false positives | 1 and 20 false positives |
+| **bracketed (default)** | cannot mis-branch | - | - |
+
+Cost is measured separately, in one process pinned to one core, over 40 cases
+solvable by every method, 9 interleaved repetitions (`bench/branch/timing.py`).
+The multiprocess campaign above is not a usable timer: three methods doing 1x,
+16x and 32x the solve work reported the same wall time to three digits.
+
+| method | ms per solve | IQR |
+|---|---|---|
+| plain Newton | 3.44 | 0.12 |
+| 16-stage ramp | 25.74 | 1.64 |
+| ramp + certificate | 28.34 | 1.55 |
+| ramp + schedule screen | 70.90 | 3.85 |
+| **bracketed (default)** | **13.04** | 1.06 |
+
+So the default is 2.0x faster than the ramp alone and 5.4x faster than the
+ramp with the screen it replaces. The certificate costs 2.6 ms on top of a
+ramp; the screen costs 45 ms, because it is a second solve.
 
 Two things worth knowing beyond the error rate.
 

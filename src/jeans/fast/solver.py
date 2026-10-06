@@ -249,9 +249,10 @@ def solve_spherical(r1, rho1, M1, Phi_b=None, n_steps=200, n_gl=N_GL_DEFAULT,
         64 agreed there was none, 0 disagreements, and no target had more than
         one root on the physical sheet.
 
-        It is also the cheapest option -- median 0.018 s against 0.044 s for the
-        ramp and 0.128 s for the ramp with the schedule screen -- and the only
-        one that covers R > R_MAX, where the ramp has no starting point at all.
+        It is also the cheapest option -- 13.0 ms against 25.7 ms for the ramp
+        and 70.9 ms for the ramp with the schedule screen, pinned to one core
+        -- and the only one that covers R > R_MAX, where the ramp has no
+        starting point at all.
 
         "ramp" runs the continuation and then the exact branch certificate.
         "ramp+schedule" is the earlier behaviour, kept for comparison; its
