@@ -1,0 +1,167 @@
+"""A differentiable density profile for the solved halo, as one JAX callable.
+
+Everything downstream of this package wants the same object. galpy's
+MultipoleExpansionPotential.from_density takes rho(r), rho(R, z) or
+rho(R, z, phi); agama's Potential(type='Multipole', density=...) takes the
+same; galax and StreamSculptor want Phi, which follows from rho. So rather
+than three exporters there is one deliverable -- a traceable rho(R, z) that is
+differentiable in the halo parameters -- and three thin adapters over it.
+
+The solvers could not supply that. jaxsolver.solve_log returns only
+[log r0, log sigma0]: rk4_monopole's lax.scan discards its trajectory, so the
+interior phi(r) is computed and thrown away, and only the non-differentiable
+numpy path ever exposed a density. rk4_monopole_traj below keeps it.
+
+Inside r1 the dark-matter density is
+
+    rho(r, theta) = rho0 exp(-phi(r) - dPhi_b(r, theta) / sigma0^2)
+
+with rho0 = sigma0^2 / (4 pi G r0^2). Note the angular dependence: even in the
+spherical solver the DM density is a function of theta whenever the baryons
+are, because only the MONOPOLE is matched on the angular average. Outside r1
+it is the CDM profile, whose own angular dependence comes from the flattening
+q0 instead. The two are therefore matched in the angular average and in the
+enclosed mass, not pointwise, so a seam at r1 is expected; its size is
+measured in tests/test_jaxprofile.py rather than assumed small.
+
+Differentiability survives the interpolation because the nodes are fixed and
+only the values carry parameters -- the same reason the fixed step count
+matters for the solve itself.
+"""
+from functools import partial
+
+import numpy as np
+
+from .jaxsolver import (GN, HAVE_JAX, N_GL_DEFAULT, _require_jax, gl_tables,
+                        mn_grid, solve_log)
+
+if HAVE_JAX:
+    import jax
+    import jax.numpy as jnp
+    from jax import lax
+
+__all__ = ["rk4_monopole_traj", "interior_profile", "density_fn",
+           "spherical_density_fn"]
+
+
+def rk4_monopole_traj(r_nodes, h, r0sq, s_n, s_h, unroll=1):
+    """As jaxsolver.rk4_monopole, but keeping phi and eta at every node.
+
+    Identical arithmetic -- the only change is that the scan emits its carry,
+    so the two agree to the last bit at the endpoint. Returns
+    (phi[n+1], eta[n+1]) including the phi(0) = eta(0) = 0 start.
+    """
+    inv3 = 1.0 / (3.0 * r0sq)
+    n = r_nodes.shape[0] - 1
+    first = jnp.zeros(n, dtype=bool).at[0].set(True)
+
+    def body(carry, xs):
+        phi, eta = carry
+        rA, rB, sA, sM, sB, is0 = xs
+        rM = rA + 0.5 * h
+        rA_s = jnp.where(is0, 1.0, rA)
+        k1p = jnp.where(is0, 0.0, rA * inv3 * jnp.exp(-eta))
+        k1e = jnp.where(is0, 0.0, -(3.0 / rA_s) * jnp.expm1(eta - phi - sA))
+
+        p2, e2 = phi + 0.5 * h * k1p, eta + 0.5 * h * k1e
+        k2p = rM * inv3 * jnp.exp(-e2)
+        k2e = -(3.0 / rM) * jnp.expm1(e2 - p2 - sM)
+
+        p3, e3 = phi + 0.5 * h * k2p, eta + 0.5 * h * k2e
+        k3p = rM * inv3 * jnp.exp(-e3)
+        k3e = -(3.0 / rM) * jnp.expm1(e3 - p3 - sM)
+
+        p4, e4 = phi + h * k3p, eta + h * k3e
+        k4p = rB * inv3 * jnp.exp(-e4)
+        k4e = -(3.0 / rB) * jnp.expm1(e4 - p4 - sB)
+
+        out = (phi + h / 6.0 * (k1p + 2.0 * k2p + 2.0 * k3p + k4p),
+               eta + h / 6.0 * (k1e + 2.0 * k2e + 2.0 * k3e + k4e))
+        return out, out
+
+    xs = (r_nodes[:-1], r_nodes[1:], s_n[:-1], s_h, s_n[1:], first)
+    _, (phi, eta) = lax.scan(body, (0.0, 0.0), xs, unroll=unroll)
+    z = jnp.zeros((1,))
+    return jnp.concatenate([z, phi]), jnp.concatenate([z, eta])
+
+
+def interior_profile(params, n_steps=200, n_gl=N_GL_DEFAULT, **kw):
+    """(r_nodes, phi_nodes, r0, sigma0) for params = (M200, c, r1, Md, a, b).
+
+    The solve is jaxsolver.solve_log, so the implicit-differentiation rule is
+    the one already validated; this only re-marches at the converged point to
+    recover the trajectory the solver throws away.
+    """
+    _require_jax()
+    M200, c, r1, Md, a, b = [params[i] for i in range(6)]
+    lg = solve_log(params, n_steps=n_steps, n_gl=n_gl, **kw)
+    r0, sigma0 = jnp.exp(lg[0]), jnp.exp(lg[1])
+    sig0sq = sigma0 ** 2
+
+    nodes = jnp.linspace(0.0, r1, n_steps + 1)
+    half = 0.5 * (nodes[:-1] + nodes[1:])
+    h = nodes[1] - nodes[0]
+    theta, w = gl_tables(n_gl)
+    theta, w = jnp.asarray(theta), jnp.asarray(w)
+
+    from .jaxsolver import source_from_grid
+    s_n = source_from_grid(mn_grid(Md, a, b, nodes, theta), w, sig0sq, 1.0)
+    s_h = source_from_grid(mn_grid(Md, a, b, half, theta), w, sig0sq, 1.0)
+    phi, _ = rk4_monopole_traj(nodes, h, r0 ** 2, s_n, s_h)
+    return nodes, phi, r0, sigma0
+
+
+def density_fn(params, n_steps=200, n_gl=N_GL_DEFAULT, q0=1.0,
+               outer_kw=None, **kw):
+    """Return rho(R, z), traceable and differentiable in `params`.
+
+    R and z are cylindrical, in kpc; the return is Msun/kpc^3. Accepts arrays
+    and broadcasts. Suitable directly as the `dens` argument of galpy's
+    MultipoleExpansionPotential.from_density or agama's Multipole.
+    """
+    _require_jax()
+    from . import jaxouter as JO
+    M200, c, r1, Md, a, b = [params[i] for i in range(6)]
+    nodes, phi, r0, sigma0 = interior_profile(params, n_steps, n_gl, **kw)
+    sig0sq = sigma0 ** 2
+    rho0 = sig0sq / (4.0 * jnp.pi * GN * r0 ** 2)
+    rho_out = JO.halo_profile(M200, c, **(outer_kw or {}))
+
+    def rho(R, z):
+        R = jnp.asarray(R, float)
+        z = jnp.asarray(z, float)
+        r = jnp.sqrt(R ** 2 + z ** 2)
+        # interior: fixed nodes, parameter-dependent values, so jnp.interp is
+        # differentiable in the halo parameters as well as in r
+        ph = jnp.interp(jnp.clip(r, 0.0, r1), nodes, phi)
+        dphi_b = (-GN * Md / jnp.sqrt(R ** 2 + (a + jnp.sqrt(b ** 2 + z ** 2)) ** 2)
+                  + GN * Md / (a + b))
+        inner = rho0 * jnp.exp(-ph - dphi_b / sig0sq)
+        # exterior: the CDM profile on the squashed radius
+        rs = JO.r_sph(jnp.maximum(r, 1e-12),
+                      jnp.arctan2(jnp.abs(R), z), q0)
+        outer = rho_out(rs)
+        return jnp.where(r <= r1, inner, outer)
+
+    return rho
+
+
+def spherical_density_fn(params, n_gl=N_GL_DEFAULT, **kw):
+    """Angular average of density_fn, as rho(r). For galpy's 1-argument form.
+
+    The average is the one the monopole is matched on, so this is the profile
+    whose enclosed mass reproduces M1 at r1 by construction.
+    """
+    _require_jax()
+    f = density_fn(params, n_gl=n_gl, **kw)
+    theta, w = gl_tables(n_gl)
+    theta, w = jnp.asarray(theta), jnp.asarray(w)
+
+    def rho(r):
+        r = jnp.asarray(r, float)
+        sh = r.shape
+        rr = jnp.atleast_1d(r)[:, None]
+        vals = f(rr * jnp.sin(theta)[None, :], rr * jnp.cos(theta)[None, :])
+        return jnp.sum(w[None, :] * vals, axis=1).reshape(sh)
+
+    return rho
