@@ -129,9 +129,38 @@ Baryonic rounding and contraction both then emerge rather than being imposed,
 and `solver2d`'s validated quadrupole linear-response machinery is reused with
 `exp(-Psi)` generalised to `F(Psi)`. The self-consistency loop is unchanged.
 
-Known limitation: real CDM haloes are anisotropic (beta ~ 0.2–0.3 outside the
-centre) and isotropy will overstate the rounding. Anisotropy is the closure to
-add next, and it is a genuine new nuisance, not a free lunch.
+### Result (2026-10-06): shape cannot discriminate at first order
+
+Built and measured, single pass with Psi_DM spherical. Two findings:
+
+**If rho = F(Psi) with F monotonic, the halo SHAPE is independent of F.**
+Isodensity surfaces are isopotential surfaces whatever F is, so collisionless
+CDM and isothermal SIDM in the same total potential have *identical* axis
+ratios -- the curves coincide exactly, and F cancels out. Shape differences are
+therefore SECOND order, arising only through the back-reaction of different
+radial profiles on Psi_DM. This explains, in one line, the saturation
+(dq/dlog10(sigma/m) ~ 0.05), the 1.3% estimation share, and why the
+shape-gradient signature died under one nuisance parameter.
+
+**CDM's own baryon-induced gradient exceeds the "SIDM signature".** Max
+|dq/dlnr| = 0.033 / 0.083 / 0.131 for Md = 1 / 3 / 6 x 10^10, against the 0.051
+previously reported as an SIDM signature. Derived inside the model, not
+inferred from five EAGLE haloes.
+
+### Consequence: anisotropy is the SIGNAL, not a nuisance
+
+Previously listed here as a limitation to patch for fairness. It is the
+physical origin of any shape difference at all. SIDM thermalises, so it is
+isotropic and its density follows the isopotentials exactly. CDM runs
+beta ~ 0.2-0.3, and an anisotropic DF does NOT give rho = F(Psi), so its shape
+departs from the isopotential surfaces. **The beta closure is where the
+SIDM-vs-CDM shape discriminant lives**, and the discovery search should range
+over observables sensitive to anisotropy rather than to the density profile's
+angular structure alone.
+
+Still open: real haloes are also triaxial, which an axisymmetric model cannot
+represent, so the loss of triaxiality that drives b/a -> 1 in simulations is
+out of reach here regardless of closure.
 
 ## What was ruled out (all measured, 2026-10-06)
 
