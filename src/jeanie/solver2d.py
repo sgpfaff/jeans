@@ -115,7 +115,8 @@ class Result2D:
     """Solution of the axisymmetric model. phi_L are the package's multipoles."""
 
     def __init__(self, r0, sigma0, L_list, phi_L, r_nodes, success, reason,
-                 residual, ratio, n_eval, lag=np.nan, max_psi=np.nan):
+                 residual, ratio, n_eval, lag=np.nan, max_psi=np.nan,
+                 Phi_b=None):
         self.r0 = r0
         self.sigma0 = sigma0
         self.L_list = list(L_list)
@@ -151,19 +152,33 @@ class Result2D:
         self.ratio = ratio
         self.n_residual_evals = n_eval
         self.rho0 = sigma0 ** 2 / (4.0 * np.pi * GN * r0 ** 2)
+        self.Phi_b = Phi_b
+        if Phi_b is not None:
+            from inspect import signature
+            n = len(signature(Phi_b).parameters)
+            self._phi_b0 = float(Phi_b(0.0, np.pi / 2) if n == 2 else Phi_b(0.0))
+        else:
+            self._phi_b0 = 0.0
 
     def phi_at(self, L, r):
         return np.interp(r, self.r_nodes, self.phi_L[L])
 
     def rho(self, r, theta):
-        """Dark-matter density at (r, theta), for r <= r1."""
-        Z = harmonics(self.L_list, n=1, half_range=False)  # shape only; recompute below
+        """Dark-matter density at (r, theta), for r <= r1.
+
+        rho0 exp(-sum_L phi_L(r) Z_L(theta) - dPhi_b(r, theta)/sigma0^2). The
+        baryon term is not optional -- omitting it overstates the density by up
+        to an order of magnitude near r1 for a Milky-Way-like disc.
+        """
         x = np.cos(theta)
         tot = np.zeros(np.shape(r * np.ones_like(x, dtype=float)), dtype=float)
         from scipy.special import eval_legendre
         for L in self.L_list:
             ZL = np.sqrt((2 * L + 1) / (4.0 * np.pi)) * eval_legendre(L, x)
             tot = tot + self.phi_at(L, r) * ZL
+        if self.Phi_b is not None:
+            tot = tot + (np.asarray(self.Phi_b(r, theta), float)
+                         - self._phi_b0) / self.sigma0 ** 2
         return self.rho0 * np.exp(-tot)
 
     def __repr__(self):
@@ -366,4 +381,4 @@ def solve_axisymmetric(r1, rho1, M1, J_L=None, L_list=(0, 2), Phi_b=None,
                   % (max_psi, PSI_HARD))
     return Result2D(float(np.exp(0.5 * logp[0])), float(np.exp(0.5 * logp[1])),
                     L_list, phi_L, nodes, bool(ok), reason, newton_res, ratio,
-                    P.n_eval, lag=lag, max_psi=max_psi)
+                    P.n_eval, lag=lag, max_psi=max_psi, Phi_b=Phi_b)

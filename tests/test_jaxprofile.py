@@ -65,9 +65,12 @@ def test_interior_density_matches_the_numpy_solver():
 
     nodes, phi, eta, s_n, r0, sigma0 = JP.interior_profile(p)
     rho0 = float(sigma0 ** 2 / (4.0 * np.pi * GN * r0 ** 2))
-    nd, ph = np.asarray(nodes), np.asarray(phi)
+    nd, ph, sn = np.asarray(nodes), np.asarray(phi), np.asarray(s_n)
     for r in (1.0, 3.0, 6.0, 9.0, 11.5):
-        got = rho0 * np.exp(-np.interp(r, nd, ph))
+        # the angular average is rho0 exp(-phi - s); the baryon source is not
+        # optional, and an earlier version of both this test and
+        # SphericalResult.rho dropped it
+        got = rho0 * np.exp(-np.interp(r, nd, ph) - np.interp(r, nd, sn))
         assert got == pytest.approx(float(ref.rho(r)), rel=1e-12)
 
 

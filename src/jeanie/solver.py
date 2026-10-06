@@ -52,13 +52,28 @@ class SphericalResult:
     r_nodes: np.ndarray = field(default=None, repr=False)
     phi: np.ndarray = field(default=None, repr=False)
     eta: np.ndarray = field(default=None, repr=False)
+    s: np.ndarray = field(default=None, repr=False)
 
     def rho(self, r):
-        """Dark-matter density at radius r, for r <= r1."""
+        """Angular-averaged dark-matter density at radius r, for r <= r1.
+
+        rho0 exp(-phi(r) - s(r)), where s = -log <exp(-dPhi_b/sigma0^2)> is the
+        baryon source. The source term is not optional: without it this
+        returns rho0 exp(-phi), which for a Milky-Way-like disc is too large by
+        a factor running from 1.13 at 0.5 kpc to 11.2 at r1 = 12 kpc. With it,
+        this matches the package's rho_sph_avg to 1e-4 .. 1e-6.
+
+        This is the ANGULAR AVERAGE, which is the quantity the monopole is
+        matched on. The density at a particular theta is
+        rho0 exp(-phi(r) - dPhi_b(r, theta)/sigma0^2) and is not spherically
+        symmetric whenever the baryons are not; jeanie.jaxprofile.density_fn
+        returns that one.
+        """
         if self.phi is None:
             raise RuntimeError("solve with trajectory=True to evaluate rho(r)")
         phi = np.interp(r, self.r_nodes, self.phi)
-        return self.rho0 * np.exp(-phi)
+        src = 0.0 if self.s is None else np.interp(r, self.r_nodes, self.s)
+        return self.rho0 * np.exp(-phi - src)
 
 
 class _Problem:
@@ -402,4 +417,4 @@ def _attach(res, r1, Phi_b, n_steps, n_gl, half_range):
     P = _Problem(r1, 1.0, 1.0, n_steps, Phi_b, n_gl, half_range)
     s_n, s_h = P.sources(res.sigma0 ** 2)
     phi, eta = rk4_monopole_full(P.nodes, P.h, res.r0 ** 2, s_n, s_h)
-    res.r_nodes, res.phi, res.eta = P.nodes, phi, eta
+    res.r_nodes, res.phi, res.eta, res.s = P.nodes, phi, eta, s_n

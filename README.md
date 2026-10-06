@@ -1,3 +1,48 @@
+> ### This is a fork, and it ships a second package: `jeanie`
+>
+> Everything below documents **`jeans`**, the upstream package, and is
+> unchanged except for six defect fixes (see [FORK.md](FORK.md)).
+>
+> This fork adds **`jeanie`** — the same physical model solved by a reduced
+> numerical route, fast and differentiable enough for Bayesian inference.
+> It imports nothing from `jeans` at runtime; the test suite uses `jeans` as
+> the reference it validates against.
+>
+> ```python
+> from jeanie.solver import solve_spherical     # ~13 ms, cannot pick the wrong branch
+> from jeanie.jaxsolver import solve_log        # the same solve, differentiable
+> from jeanie.jaxprofile import mass_fn, radial_acceleration_fn, density_fn
+> ```
+>
+> What it adds beyond speed:
+>
+> - **An exact existence criterion.** The matching problem is multi-valued —
+>   the classical isothermal spiral — so a root is not an answer until
+>   something says which branch it is on. `jeanie` solves by bracketing, which
+>   cannot reach another branch, and reports non-existence rather than
+>   returning something plausible. Roughly 7% of a realistic prior has no
+>   solution.
+> - **Exact gradients** in `M200`, `c`, `q0`, the Einasto index and the baryon
+>   parameters, by implicit differentiation, with `jit` and `vmap`.
+> - **Einasto and adiabatic contraction in closed form**, so those paths are
+>   differentiable too. Contraction moves the core radius by a median 10–14%,
+>   so it is not optional for inference.
+> - **An exportable potential** — `rho(R, z)`, `M(<r)` and `g_r(r)` as
+>   traceable callables, which is what galpy's
+>   `MultipoleExpansionPotential.from_density`, agama's `Multipole`, and
+>   galax/StreamSculptor all consume.
+>
+> Examples: [`examples/jeanie_basics.ipynb`](examples/jeanie_basics.ipynb),
+> [`examples/jeanie_differentiable.ipynb`](examples/jeanie_differentiable.ipynb),
+> and [`examples/jeanie_quickstart.py`](examples/jeanie_quickstart.py), which is
+> run by the test suite so it cannot go stale.
+>
+> **Note on the distribution name.** `jeans` is taken on PyPI by an unrelated
+> package in the same subfield, so neither upstream nor this fork can publish
+> under it. `jeanie` is free.
+
+---
+
 # jeans
 
 **jeans** is a Python package for computing dark matter halo profiles with baryons used in the paper [_Jeans Model for the Shapes of Self-interacting Dark Matter Halos_](https://arxiv.org/pdf/2511.10765). The jeans package can be used to model collisioinless dark matter (CDM) and self-interacting dark matter (SIDM) in one dimension assuming spherical symmetry and two dimensions assuming axisymmetry.

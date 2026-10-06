@@ -184,3 +184,30 @@ def test_schedule_independence_accepts_genuine_solutions(outer_data):
                             method="ramp", verify=False)
         assert g.success, f"rejected a good solve at r1={r1}: {g.reason}"
         assert g.r0 == pytest.approx(u.r0, rel=1e-12), "verify changed the answer"
+
+
+def test_rho_includes_the_baryon_boltzmann_factor(outer_data):
+    """Regression: rho() returned rho0 exp(-phi), omitting -s.
+
+    The angular-averaged DM density is rho0 exp(-phi - s) with
+    s = -log <exp(-dPhi_b/sigma0^2)>. Dropping s overstated the density by a
+    factor running from 1.13 at 0.5 kpc to 11.2 at r1 = 12 kpc for a
+    Milky-Way-like disc -- an order of magnitude at the matching radius, and
+    invisible without comparing against the package.
+    """
+    import jeans
+    r1, M200, c = 12.0, 1e12, 10.0
+    rho1, M1 = outer_data(r1, M200, c, 1.0, mn_phi, (0,))[:2]
+    res = solve_spherical(r1, rho1, M1, Phi_b=mn_phi, trajectory=True)
+    assert res.success
+    pkg = jeans.spherical(r1, M200, c, Phi_b=mn_phi)
+
+    for r in (0.5, 2.0, 5.0, 9.0, 11.5):
+        assert float(res.rho(r)) == pytest.approx(float(pkg.rho_sph_avg(r)),
+                                                  rel=2e-3), f"r={r}"
+
+    # and the guard: the source must actually be applied, not merely stored
+    assert res.s is not None and np.any(res.s > 0.0)
+    bare = res.rho0 * np.exp(-np.interp(11.5, res.r_nodes, res.phi))
+    assert bare / float(res.rho(11.5)) > 5.0, \
+        "rho() looks like it dropped the baryon factor again"
