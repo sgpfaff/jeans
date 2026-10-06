@@ -13,8 +13,8 @@ Single process, pinned, interleaved so drift hits every method equally.
 import os, statistics, sys, time
 import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))
-from jeans.fast.solver import _Problem, solve_spherical, GN
-import jeans.fast.branch as B
+from jeanie.solver import _Problem, solve_spherical, GN
+import jeanie.branch as B
 
 os.sched_setaffinity(0, {os.sched_getaffinity(0).pop()})
 

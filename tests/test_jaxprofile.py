@@ -10,8 +10,8 @@ import numpy as np
 import pytest
 
 from jeans.definitions import GN
-from jeans.fast import jaxsolver as J
-from jeans.fast.solver import solve_spherical
+from jeanie import jaxsolver as J
+from jeanie.solver import solve_spherical
 
 pytestmark = pytest.mark.skipif(not J.HAVE_JAX, reason="jax not installed")
 
@@ -19,7 +19,7 @@ if J.HAVE_JAX:
     import jax
     import jax.numpy as jnp
 
-    from jeans.fast import jaxprofile as JP
+    from jeanie import jaxprofile as JP
 
 P = [1e12, 10.0, 12.0, 6e10, 3.0, 0.28]        # M200, c, r1, Md, a, b
 
@@ -63,7 +63,7 @@ def test_interior_density_matches_the_numpy_solver():
     ref = solve_spherical(r1, rho1, M1, Phi_b=pb, trajectory=True)
     assert ref.success
 
-    nodes, phi, r0, sigma0 = JP.interior_profile(p)
+    nodes, phi, eta, s_n, r0, sigma0 = JP.interior_profile(p)
     rho0 = float(sigma0 ** 2 / (4.0 * np.pi * GN * r0 ** 2))
     nd, ph = np.asarray(nodes), np.asarray(phi)
     for r in (1.0, 3.0, 6.0, 9.0, 11.5):
@@ -135,3 +135,87 @@ def test_density_jits_and_vmaps():
     out = V(jnp.linspace(5e11, 2e12, 8))
     assert bool(jnp.all(jnp.isfinite(out)))
     assert bool(jnp.all(jnp.diff(out) > 0)), "density should rise with M200"
+
+
+def test_enclosed_mass_is_exact_at_the_matching_radius():
+    """M(<r1) = M1 is a matching condition, so it holds to machine precision.
+
+    That is also why the acceleration needs no patching at the join: M and
+    rho are both continuous there, so g = -GM/r^2 is C1 across it.
+    """
+    p = _p()
+    M200, c, r1 = P[0], P[1], P[2]
+    M1 = float(J.nfw_boundary(M200, c, r1)[1])
+    M = JP.mass_fn(p)
+    assert float(M(r1)) == pytest.approx(M1, rel=1e-12)
+    assert float(M(r1 + 1e-9)) == pytest.approx(float(M(r1 - 1e-9)), rel=1e-8)
+    # and it must be monotone, which a bad interpolant quietly breaks
+    rs = np.linspace(0.05, 3.0 * r1, 200)
+    vals = np.array([float(M(r)) for r in rs])
+    assert np.all(np.diff(vals) > 0), "enclosed mass is not monotone"
+
+
+def test_radial_acceleration_is_finite_at_the_origin_and_points_inward():
+    p = _p()
+    g = JP.radial_acceleration_fn(p)
+    assert float(g(0.0)) == 0.0
+    for r in (0.1, 1.0, 5.0, 11.9, 12.1, 40.0):
+        assert float(g(r)) < 0.0, f"not inward at r={r}"
+    assert np.isfinite(float(g(1e-8)))
+
+
+@pytest.mark.slow
+def test_acceleration_gradients_match_finite_differences():
+    """This is the quantity a stream likelihood differentiates, so pin it."""
+    p = _p()
+    f = lambda q: JP.radial_acceleration_fn(q)(3.7)
+    g = jax.grad(f)(p)
+    assert bool(jnp.all(jnp.isfinite(g)))
+    for k in range(6):
+        if abs(float(g[k])) < 1e-30:
+            continue
+        best = np.inf
+        for h in (1e-4, 1e-5, 1e-6):
+            d = jnp.zeros(6).at[k].set(h * abs(p[k]))
+            fd = float((f(p + d) - f(p - d)) / (2 * h * abs(p[k])))
+            best = min(best, abs(fd / float(g[k]) - 1.0))
+        assert best < 1e-7, f"parameter {k}: {best:.2e}"
+
+
+def test_hermite_beats_linear_on_smoothness():
+    """Cubic Hermite is used instead of jnp.interp for a measured reason.
+
+    Linear interpolation of M(<r) is C0, so its kinks land directly in
+    d a / d r -- spurious stiffness to an adaptive integrator, noise to a
+    gradient. The test compares the two on the same quantity rather than
+    asserting an absolute threshold: the second difference of the
+    acceleration straddling an interior node, where a linear interpolant
+    kinks and a Hermite one does not.
+    """
+    p = _p()
+    nodes, phi, eta, s_n, r0, sigma0 = JP.interior_profile(p)
+    nd = np.asarray(nodes)
+    h = float(nd[1] - nd[0])
+    rho0 = float(sigma0 ** 2 / (4.0 * np.pi * GN * r0 ** 2))
+    M_nodes = np.asarray(4.0 * np.pi / 3.0 * rho0 * nodes ** 3 * jnp.exp(-eta))
+
+    g_herm = JP.radial_acceleration_fn(p)
+
+    def g_lin(r):                       # the rejected alternative
+        return -GN * float(np.interp(r, nd, M_nodes)) / r ** 2
+
+    def curv(f, r_node, d):
+        return abs(f(r_node - d) - 2.0 * f(r_node) + f(r_node + d))
+
+    worse = []
+    for i in (37, 57, 101, 151):
+        rn, d = float(nd[i]), h / 8.0
+        ch = curv(lambda r: float(g_herm(r)), rn, d)
+        cl = curv(g_lin, rn, d)
+        worse.append(cl / max(ch, 1e-300))
+    # Measured ratios at these nodes are 9.0 to 22.1, so 5 is a floor with
+    # margin rather than a guess. This is a LOCAL proxy: the effect that
+    # motivated Hermite was on the gradient of an orbit loss, where the kinks
+    # accumulate over thousands of steps and the gap was four orders of
+    # magnitude (5e-5 against 1e-8), not one.
+    assert min(worse) > 5.0, f"Hermite not clearly smoother: ratios {worse}"

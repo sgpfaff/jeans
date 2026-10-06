@@ -121,7 +121,7 @@ def seed(r1, rho1, M1, GN=4.302e-6):
     first stage IS the baryon-free problem, which has no solution above R_MAX,
     so the path the continuation wants to follow does not exist at its own
     starting point and no value of n_ramp changes that. Those configurations
-    are reached instead by jeans.fast.branch.solve_bracketed, which does not
+    are reached instead by jeanie.branch.solve_bracketed, which does not
     continue anything.
     """
     out = solve(r1, rho1, M1, GN=GN)

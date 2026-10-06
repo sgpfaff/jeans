@@ -9,11 +9,11 @@ import numpy as np
 import pytest
 
 from jeans.definitions import GN
-from jeans.fast import universal
-from jeans.fast.kernels import source_from_grid
-from jeans.fast.quadrature import (angular_average_exp, gauss_legendre,
+from jeanie import universal
+from jeanie.kernels import source_from_grid
+from jeanie.quadrature import (angular_average_exp, gauss_legendre,
                                    tabulate_baryons)
-from jeans.fast.solver import solve_spherical
+from jeanie.solver import solve_spherical
 
 MD, A_D, B_D = 6e10, 3.0, 0.28
 MSTAR, A_H = 5e10, 4.0

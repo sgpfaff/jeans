@@ -1,6 +1,6 @@
 """Differentiable axisymmetric solver: JAX backend.
 
-The two-dimensional counterpart of :mod:`jeans.fast.jaxsolver`, and the one
+The two-dimensional counterpart of :mod:`jeanie.jaxsolver`, and the one
 that matters scientifically -- the quadrupole is what a stream's orbital plane
 responds to.
 
@@ -45,7 +45,7 @@ double-where treatment as the r=0 node.
 
 Scope: even L only (z-symmetry assumed), NFW outer halo, Miyamoto-Nagai disc.
 L=4 inherits the linear-response limitation documented in
-:mod:`jeans.fast.solver2d` -- where phi_2^2 is comparable to phi_4 the dropped
+:mod:`jeanie.solver2d` -- where phi_2^2 is comparable to phi_4 the dropped
 quadratic term is the leading contribution to L=4, not a correction to it.
 """
 from functools import partial
@@ -319,7 +319,7 @@ def solve_log_2d(params, L_list=(0, 2), J_L=None, n_steps=200,
 
     ``boundary`` overrides (rho1, M1). The internal closed form is a spherical
     NFW, so a squashed outer halo needs its own boundary data passed in; see
-    jeans.fast.outer.boundary_data. Gradients then stop at the boundary rather
+    jeanie.outer.boundary_data. Gradients then stop at the boundary rather
     than reaching M200 and c.
     """
     _require_jax()

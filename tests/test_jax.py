@@ -11,8 +11,8 @@ import numpy as np
 import pytest
 
 from jeans.definitions import GN
-from jeans.fast import jaxsolver as J
-from jeans.fast.solver import solve_spherical
+from jeanie import jaxsolver as J
+from jeanie.solver import solve_spherical
 
 pytestmark = pytest.mark.skipif(not J.HAVE_JAX, reason="jax not installed")
 
@@ -190,7 +190,7 @@ def test_schedule_independence_gate_runs_and_agrees_on_good_cases():
 def test_jax_boundary_matches_package(M200, c, r1, q0):
     """Closed-form squashed boundary against CDM_profile."""
     from jeans.classes import CDM_profile
-    from jeans.fast import jaxouter as JO
+    from jeanie import jaxouter as JO
     o = CDM_profile(M200, c, q0=q0)
     rho1, M1, JL = JO.boundary_data(M200, c, r1, q0=q0, L_list=(0, 2))
     pkJ = o.compute_potential_moments(r1, L_list=[0, 2], M_list=[0, 0])
@@ -202,7 +202,7 @@ def test_jax_boundary_matches_package(M200, c, r1, q0):
 
 
 def test_jax_boundary_reduces_to_nfw_boundary_when_spherical():
-    from jeans.fast import jaxouter as JO
+    from jeanie import jaxouter as JO
     a = JO.boundary_data(1e12, 10.0, 10.0, q0=1.0, L_list=(0,))
     b = J.nfw_boundary(1e12, 10.0, 10.0)
     assert float(a[0]) == pytest.approx(float(b[0]), rel=1e-14)
@@ -211,7 +211,7 @@ def test_jax_boundary_reduces_to_nfw_boundary_when_spherical():
 
 def test_boundary_gradients_reach_the_halo_parameters():
     """The point of the module: q0 was previously not differentiable at all."""
-    from jeans.fast import jaxouter as JO
+    from jeanie import jaxouter as JO
     f = lambda p: jnp.log(JO.enclosed_mass(10.0, p[0], p[1], p[2]))
     p0 = np.array([1e12, 10.0, 0.8])
     g = np.asarray(jax.grad(f)(jnp.asarray(p0)))
@@ -235,9 +235,9 @@ def test_full_2d_chain_is_differentiable_including_q0():
     relative comparison is dominated by the finite difference's own noise.
     """
     from jeans.classes import CDM_profile
-    from jeans.fast import jaxouter as JO, jaxsolver2d as J2
-    from jeans.fast.outer import boundary_data as np_boundary
-    from jeans.fast.solver2d import solve_axisymmetric
+    from jeanie import jaxouter as JO, jaxsolver2d as J2
+    from jeanie.outer import boundary_data as np_boundary
+    from jeanie.solver2d import solve_axisymmetric
 
     Ls = (0, 2)
 
@@ -301,7 +301,7 @@ def _mn_np(Md, a, b):
 
 def test_einasto_matches_the_package_to_machine_precision():
     from jeans.cdm import M_Einasto, rho_Einasto
-    from jeans.fast import jaxouter as JO
+    from jeanie import jaxouter as JO
     M200, c, alpha = 1e12, 10.0, 0.18
     rs = np.array([2.0, 5.0, 10.0, 20.0, 40.0])
     rho_m2, r_m2, r200 = JO.einasto_params(M200, c, alpha)
@@ -321,7 +321,7 @@ def test_baryon_mass_beats_the_package_against_exact_quadrature():
     """M_b = r^2/G d<Phi_b>/dr, by autodiff rather than by splining."""
     from scipy.integrate import quad
     from jeans.tools import compute_Mb
-    from jeans.fast import jaxouter as JO
+    from jeanie import jaxouter as JO
     Md, a, b = 5e10, 2.5, 0.4
     pj, pn = _mn_jnp(Md, a, b), _mn_np(Md, a, b)
     r200 = float(JO.einasto_params(1e12, 10.0, 0.18)[2])
@@ -352,7 +352,7 @@ def test_cautun_does_not_reduce_to_the_uncontracted_profile():
     the same halo rather than a small correction to one. Worth pinning,
     because it is the first thing that looks like a bug and is not.
     """
-    from jeans.fast import jaxouter as JO
+    from jeanie import jaxouter as JO
     M_cdm = lambda r: jnp.asarray(1.0)
     zero = lambda r: jnp.asarray(0.0)
     f = float(JO.ac_mass(10.0, M_cdm, zero, "Cautun"))
@@ -365,7 +365,7 @@ def test_cautun_does_not_reduce_to_the_uncontracted_profile():
 def test_adiabatic_contraction_matches_the_package(presc):
     from jeans.cdm import AC_profiles
     from jeans.tools import compute_Mb
-    from jeans.fast import jaxouter as JO
+    from jeanie import jaxouter as JO
     M200, c, Md, a, b = 1e12, 10.0, 5e10, 2.5, 0.4
     pj, pn = _mn_jnp(Md, a, b), _mn_np(Md, a, b)
     r200 = float(JO.einasto_params(M200, c, 0.18)[2])
@@ -383,7 +383,7 @@ def test_adiabatic_contraction_matches_the_package(presc):
 @pytest.mark.slow
 def test_contracted_boundary_gradients_reach_every_halo_parameter():
     """Gradients must survive Einasto, contraction and the squashing together."""
-    from jeans.fast import jaxouter as JO
+    from jeanie import jaxouter as JO
     pj = _mn_jnp(5e10, 2.5, 0.4)
 
     def f(p):

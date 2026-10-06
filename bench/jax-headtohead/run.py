@@ -42,7 +42,7 @@ import jax
 import jax.numpy as jnp
 
 from jeans.definitions import GN
-from jeans.fast.solver import solve_spherical
+from jeanie.solver import solve_spherical
 
 # Match configurations. A's module-level UNROLL is read at trace time.
 A.UNROLL = 1

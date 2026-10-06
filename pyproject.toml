@@ -29,7 +29,18 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["jeans*"]
+# Two packages live here for now. `jeans` is the fork of upstream, carrying
+# the six defect fixes so they stay a clean diff for an eventual PR, and the
+# test suite uses it as the reference it validates against. `jeanie` is the
+# fast, differentiable layer, which imports nothing from `jeans` at runtime.
+#
+# NOTE before anything is ever published: the distribution name below cannot
+# stay "jeans". That name is taken on PyPI by an unrelated package of the
+# same subfield (Matthew Walker, CMU, v2.4.2, "integrals related to the
+# spherical Jeans equation"), so upstream cannot publish under it either.
+# "jeanie" is free. Picking the final metadata belongs with the repo split,
+# not with an import rewrite, so it is deliberately left alone here.
+include = ["jeans*", "jeanie*"]
 
 [tool.setuptools.package-data]
 jeans = ["data/*.csv"]

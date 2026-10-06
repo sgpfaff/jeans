@@ -3,8 +3,8 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))
 warnings.simplefilter("ignore")
 from jeans.definitions import GN
-from jeans.fast import outer
-from jeans.fast.solver2d import solve_axisymmetric
+from jeanie import outer
+from jeanie.solver2d import solve_axisymmetric
 from jeans.classes import CDM_profile
 from multiprocessing import Pool
 

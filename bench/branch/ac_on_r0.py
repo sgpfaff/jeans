@@ -11,8 +11,8 @@ jax.config.update("jax_enable_x64", True)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))
 warnings.simplefilter("ignore")
 from jeans.definitions import GN
-from jeans.fast import jaxouter as JO
-from jeans.fast.solver import solve_spherical
+from jeanie import jaxouter as JO
+from jeanie.solver import solve_spherical
 
 rng = np.random.default_rng(17)
 rows = {"Cautun": [], "Gnedin": []}

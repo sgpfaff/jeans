@@ -12,8 +12,8 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "..", "src")); sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import enumerate_roots as E, fwd
-from jeans.fast.solver import _Problem, GN
-import jeans.fast.branch as B
+from jeanie.solver import _Problem, GN
+import jeanie.branch as B
 from multiprocessing import Pool
 
 xs, ws = fwd.nodes(16)

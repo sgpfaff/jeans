@@ -20,7 +20,7 @@ pytestmark = pytest.mark.slow
 import jeans
 from jeans.classes import CDM_profile
 from jeans.definitions import GN
-from jeans.fast.solver2d import solve_axisymmetric
+from jeanie.solver2d import solve_axisymmetric
 
 MD, A_D, B_D = 6e10, 3.0, 0.28
 
@@ -169,7 +169,7 @@ def test_monopole_reduces_to_the_one_dimensional_solver(outer_data):
     enumeration there, so this stays a test of the 2D code path rather than a
     second comparison of branch-selection strategies.
     """
-    from jeans.fast.solver import solve_spherical
+    from jeanie.solver import solve_spherical
     r1, M200, c = 10, 1e12, 10.0
     rho1, M1, JL = outer_data(r1, M200, c, 1.0, mn_phi, (0,))
     a = solve_spherical(r1, rho1, M1, Phi_b=mn_phi, method="ramp", verify=False)
@@ -261,7 +261,7 @@ def test_max_psi_is_zero_without_higher_multipoles(outer_data):
 
 def test_absurd_shape_is_refused_rather_than_extrapolated(outer_data):
     """Past PSI_HARD the error curve was never measured, so do not pretend."""
-    from jeans.fast.solver2d import PSI_HARD
+    from jeanie.solver2d import PSI_HARD
     r1, M200, c = 10.0, 1e12, 10.0
     rho1, M1, J_L = outer_data(r1, M200, c, 0.5, mn_phi, (0, 2))
     # x12 gives psi = 1.49 and otherwise converges, so this exercises

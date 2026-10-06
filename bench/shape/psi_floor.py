@@ -16,7 +16,7 @@ def one(arg):
     q0, Md, r1, M200, c, a, b, r_grid, n_steps = arg
     import jeans
     from jeans.classes import CDM_profile
-    from jeans.fast.solver2d import solve_axisymmetric
+    from jeanie.solver2d import solve_axisymmetric
     pb = lambda r, th: -GN * Md / np.sqrt(
         r ** 2 * np.sin(th) ** 2 + (a + np.sqrt(b ** 2 + r ** 2 * np.cos(th) ** 2)) ** 2)
     try:

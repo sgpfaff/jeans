@@ -24,10 +24,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import jeans
 from jeans.classes import CDM_profile
 from jeans.definitions import GN
-from jeans.fast import universal
-from jeans.fast.outer import boundary_data as fast_boundary_data
-from jeans.fast.solver import solve_spherical
-from jeans.fast.solver2d import solve_axisymmetric
+from jeanie import universal
+from jeanie.outer import boundary_data as fast_boundary_data
+from jeanie.solver import solve_spherical
+from jeanie.solver2d import solve_axisymmetric
 
 from harness import (Timing, density_error, environment, measure, rel_err,
                      save, speedup_interval)

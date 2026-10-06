@@ -6,7 +6,7 @@ import pytest
 
 from jeans.classes import CDM_profile
 from jeans.definitions import GN
-from jeans.fast.outer import boundary_data, potential_moments
+from jeanie.outer import boundary_data, potential_moments
 
 pytestmark = pytest.mark.slow
 
@@ -104,13 +104,13 @@ def test_is_substantially_faster_than_the_package():
 @pytest.mark.parametrize("name,M200,c,q0,pb,r1,Ls", CASES)
 def test_enclosed_mass_matches_package(name, M200, c, q0, pb, r1, Ls):
     """The v^2 substitution should make this essentially exact, not merely close."""
-    from jeans.fast.outer import enclosed_mass
+    from jeanie.outer import enclosed_mass
     o = CDM_profile(M200, c, q0=q0, Phi_b=pb)
     assert enclosed_mass(o, r1) == pytest.approx(o.M_encl(r1), rel=1e-8)
 
 
 def test_enclosed_mass_is_converged_at_the_defaults():
-    from jeans.fast.outer import enclosed_mass
+    from jeanie.outer import enclosed_mass
     o = CDM_profile(1e12, 10.0, q0=0.8, Phi_b=mn_phi)
     ref = enclosed_mass(o, 10.0, n_r=256, n_gl=64)
     for n_r, n_gl in ((32, 16), (48, 16), (96, 32)):
@@ -120,7 +120,7 @@ def test_enclosed_mass_is_converged_at_the_defaults():
 def test_enclosed_mass_delegates_when_spherical():
     """q0=1 has a cheap package path already; match it exactly rather than
     re-deriving it and introducing a difference."""
-    from jeans.fast.outer import enclosed_mass
+    from jeanie.outer import enclosed_mass
     o = CDM_profile(1e12, 10.0, q0=1.0, Phi_b=mn_phi)
     assert enclosed_mass(o, 10.0) == o.M_encl(10.0)
 

@@ -1,6 +1,6 @@
 # Branch selection: ground truth and the measured rates
 
-The numbers quoted in `FORK.md` and in the `jeans.fast.branch` docstring come
+The numbers quoted in `FORK.md` and in the `jeanie.branch` docstring come
 from here.
 
 The point of this directory is that the reference must not share the failure
@@ -10,7 +10,7 @@ continues anything.
 
 | file | what it is |
 |------|------------|
-| `fwd.py` | The reduced forward map `(u1, Lam) -> (R, mu)` for a Miyamoto-Nagai disc, written independently of `jeans.fast`. Explicit: one RK4 integration, no root-find. Agrees with the solver's own converged answers to 9.5e-12 over 399 random cases. |
+| `fwd.py` | The reduced forward map `(u1, Lam) -> (R, mu)` for a Miyamoto-Nagai disc, written independently of `jeanie`. Explicit: one RK4 integration, no root-find. Agrees with the solver's own converged answers to 9.5e-12 over 399 random cases. |
 | `enumerate_roots.py` | Exhaustive root enumeration. Evaluates the forward map on a dense grid, takes every cell where both residuals change sign, polishes with Newton and deduplicates. Finds every root in the box, including ones no continuation path reaches. |
 | `bigvalid.py` | The bracketed solver against that enumeration, with the physical sheet identified properly -- by walking each root down to `u1 -> 0` and requiring `det > 0` throughout, not by the `u1 < 22.544` shortcut, which is sufficient but not necessary. |
 | `campaign.py` | Draws from two priors and runs every method plus both screens on each. `wide` is the stream-inference prior and measures the operational rate; `fold` is conditioned toward deep discs and large `R` and exists only to put enough fold events in the sample for usable error bars. |

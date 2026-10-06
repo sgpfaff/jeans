@@ -1,6 +1,6 @@
 """Differentiable spherical solver: JAX backend.
 
-Same algorithm as :mod:`jeans.fast.solver` -- fixed-node Gauss-Legendre angular
+Same algorithm as :mod:`jeanie.solver` -- fixed-node Gauss-Legendre angular
 average, fixed-step RK4 monopole, two log-residuals in [log r0^2, log sigma0^2],
 continuation in the baryon amplitude -- re-expressed so the whole forward solve
 is one traceable expression. That buys three things the numba path cannot
@@ -89,13 +89,13 @@ def _require_jax():
     if not HAVE_JAX:                                  # pragma: no cover
         raise ImportError(
             "the JAX backend needs jax installed; the numba backend in "
-            "jeans.fast.solver has no such dependency"
+            "jeanie.solver has no such dependency"
         )
 
 
 # --------------------------------------------------------------- constants
 def gl_tables(n=N_GL_DEFAULT):
-    """Angular nodes and weights, identical to jeans.fast.quadrature."""
+    """Angular nodes and weights, identical to jeanie.quadrature."""
     if n not in _GL_CACHE:
         x, w = np.polynomial.legendre.leggauss(n)
         x, w = 0.5 * (x + 1.0), 0.5 * w
@@ -107,12 +107,12 @@ def gl_tables(n=N_GL_DEFAULT):
 def universal_branch(stride=UNIV_STRIDE):
     """(u, g = phi - eta, phi) on the monotone first branch.
 
-    Taken from jeans.fast.universal so both backends seed from the same curve.
+    Taken from jeanie.universal so both backends seed from the same curve.
     Parameter-free, so it is a compile-time constant. The branch endpoint is
     always kept whatever the stride, because it is the existence criterion.
     """
     if stride not in _UNIV_CACHE:
-        from jeans.fast import universal as _u
+        from jeanie import universal as _u
         u, g, phi, _ = _u._first_branch()
         sl = slice(None, None, stride)
         uu, gg, pp = u[sl].copy(), g[sl].copy(), phi[sl].copy()
@@ -230,7 +230,7 @@ def _value_and_jac(fun, x):
 def universal_seed(r1, rho1, M1, tables):
     """[log r0^2, log sigma0^2] from the universal curve, branch-free.
 
-    Mirrors jeans.fast.universal.seed including its clamp: when no Phi_b = 0
+    Mirrors jeanie.universal.seed including its clamp: when no Phi_b = 0
     solution exists the target is pinned just inside the branch endpoint,
     because baryons move the existence boundary. The clamp is taken against
     g[-1] itself rather than against a stored R_MAX -- a constant that sat

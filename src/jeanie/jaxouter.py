@@ -1,6 +1,6 @@
 """Outer-halo boundary data in closed form, differentiable in the halo parameters.
 
-:mod:`jeans.fast.outer` made the boundary fast by replacing nested adaptive
+:mod:`jeanie.outer` made the boundary fast by replacing nested adaptive
 quadrature with fixed nodes, but it still calls the package's ``rho_sph`` on
 those nodes, which is a host function. That blocks ``vmap`` and, more
 importantly, blocks gradients: a stream fit varies M200, c and q0, and those
@@ -291,7 +291,7 @@ def enclosed_mass(r1, M200, c, q0=1.0, n_r=48, n_gl=16, rho_sph=None, **kw):
     Uses r = r1 v^2, which turns the r^-1 central cusp of
     4 pi r^2 rho dr into a smooth 8 pi r1^3 v^5 rho(r1 v^2) dv, so a fixed rule
     needs no inner cutoff and no separate tail integral. Same substitution as
-    the numpy version in jeans.fast.outer, which agrees with the package to
+    the numpy version in jeanie.outer, which agrees with the package to
     5.7e-11.
     """
     f = halo_profile(M200, c, **kw) if rho_sph is None else rho_sph

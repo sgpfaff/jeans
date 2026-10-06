@@ -19,8 +19,8 @@ changed; nothing here is guarded.
 import numpy as np
 import pytest
 
-from jeans.fast import branch, universal
-from jeans.fast.solver import GN, _Problem, solve_spherical
+from jeanie import branch, universal
+from jeanie.solver import GN, _Problem, solve_spherical
 
 # ---------------------------------------------------------------- fixtures --
 # Measured: the ramp lands on sheet 3 at u1 = 2211 with a machine-precision

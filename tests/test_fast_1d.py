@@ -12,8 +12,8 @@ import numpy as np
 import pytest
 
 from jeans.definitions import GN
-from jeans.fast import universal
-from jeans.fast.solver import solve_spherical
+from jeanie import universal
+from jeanie.solver import solve_spherical
 
 pytestmark = pytest.mark.slow
 

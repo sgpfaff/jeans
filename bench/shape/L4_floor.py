@@ -18,7 +18,7 @@ def one(arg):
     q0, n, n_outer = arg
     import jeans
     from jeans.classes import CDM_profile
-    from jeans.fast.solver2d import solve_axisymmetric
+    from jeanie.solver2d import solve_axisymmetric
     Md, a, b, r1, M200, c = 6e10, 3.0, 0.28, 12.0, 1e12, 10.0
     pb = lambda r, th: -GN * Md / np.sqrt(
         r ** 2 * np.sin(th) ** 2 + (a + np.sqrt(b ** 2 + r ** 2 * np.cos(th) ** 2)) ** 2)

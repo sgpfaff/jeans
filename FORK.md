@@ -34,12 +34,19 @@ upstream.
 
 D2's NaN and D6's Jensen gap both change published numbers, not just error paths.
 
-### Reduced solvers (`src/jeans/fast/`)
+### Reduced solvers (`src/jeanie/`)
+
+`examples/jeanie_quickstart.py` runs all of the below end to end and is
+executed by the test suite, so it cannot drift from the code:
+
+```
+PYTHONPATH=src python examples/jeanie_quickstart.py
+```
 
 ```python
 from jeans.classes import CDM_profile
-from jeans.fast.outer import boundary_data
-from jeans.fast.solver2d import solve_axisymmetric
+from jeanie.outer import boundary_data
+from jeanie.solver2d import solve_axisymmetric
 
 halo = CDM_profile(1e12, 10.0, q0=0.8, Phi_b=my_disc)
 rho1, M1, J_L = boundary_data(halo, 10.0, L_list=(0, 2))
@@ -290,14 +297,20 @@ block-tridiagonal treatment of L=4.
 
 ```python
 import jax, jax.numpy as jnp
-from jeans.fast.jaxsolver import solve_log      # (M200, c, r1, Md, a, b)
+from jeanie.jaxsolver import solve_log      # (M200, c, r1, Md, a, b)
 
 p = jnp.array([1e12, 10.0, 10.0, 6e10, 3.0, 0.28])
 jax.jacfwd(solve_log)(p)                        # exact 2x6 Jacobian
 jax.vmap(solve_log)(P)                          # a whole ensemble
 ```
 
-Pinned to one core, matched settings, against numba:
+Pinned to one core, matched settings, against numba. These were taken while
+the machine was heavily loaded (the shared box sat at load 110-192 on 72
+cores for most of that session), so read the ratios rather than the absolute
+numbers: a later, quiet-machine measurement of the same numba path with the
+same settings gives 25.7 ms rather than 30.8 ms. The methodology that
+replaced it is `bench/branch/timing.py` -- one process, one core, interleaved
+repetitions. The JAX column has not been re-measured under it.
 
 | | JAX | numba |
 |---|-----|-------|
