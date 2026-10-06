@@ -16,6 +16,13 @@ the total-matter profile and the prescription removes the cosmological baryon
 fraction. So AC-on and AC-off are different models of the same halo, not a
 small correction to one.
 
+What that does to the solved core, over 120 halos from the same prior: the
+core radius r0 moves by a median -13.9% (Cautun) or -10.7% (Gnedin), with a
+p10 of -36% and -40% and a maximum of 56% and 60%, and the central density by
+a median +24.9% and +7.7% with a p90 of +148% and +172%. r0 is essentially
+what constrains the cross-section, so running without contraction is a
+modelling choice to be stated rather than a simplification.
+
 Here the density itself is analytic, so the same fixed-node quadratures become
 one traceable expression and the derivatives come out exactly.
 

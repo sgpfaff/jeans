@@ -196,6 +196,25 @@ than contraction: at zero baryon mass the Cautun factor is
 total-matter profile and the prescription removes the cosmological baryon
 fraction. AC-on and AC-off are different models of the same halo.
 
+The number that matters for inference is not the boundary shift but what it
+does to the solved core. Over 120 halos drawn from the same prior, solved
+with AC off and on:
+
+| | core radius `r0` | dispersion `sigma0` | central density `rho0` |
+|---|---|---|---|
+| Cautun (n=110) | **-13.9%** (p10 -35.9%, max 56.5%) | -4.0% | +24.9% (p90 +148%, max 452%) |
+| Gnedin (n=112) | **-10.7%** (p10 -39.8%, max 60.1%) | -6.8% | +7.7% (p90 +172%, max 646%) |
+
+`r0` is essentially what constrains the cross-section, so a tens-of-percent
+median shift with a 60% tail is not a correction to a fit, it is a different
+fit. Running without contraction is a modelling choice that has to be stated,
+not a simplification.
+
+One more reason the package path was not viable here: a single contracted
+boundary evaluation costs it 90.7 s against 9.2 s for this one including JAX
+tracing. At 90 s a chain of 1e5 samples is about 100 days, so adiabatic
+contraction was unusable for inference before it was undifferentiable.
+
 ## Status
 
 Defect fixes, the 1D and 2D reduced solvers, the fast outer halo, the
