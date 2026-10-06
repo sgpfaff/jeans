@@ -192,7 +192,10 @@ def spherical_density_fn(params, n_gl=N_GL_DEFAULT, **kw):
 
 
 def mass_fn(params, n_steps=200, n_gl=N_GL_DEFAULT, q0=1.0, outer_kw=None, **kw):
-    """Enclosed mass M(<r), traceable and differentiable in `params`.
+    """Enclosed DARK MATTER mass M(<r), traceable and differentiable.
+
+    Dark matter only; the baryons shape it through Phi_b but are not added to
+    it. See radial_acceleration_fn.
 
     Inside r1 this needs no interpolation of a potential and no Poisson
     solve: the march's second variable gives it in closed form,
@@ -227,7 +230,13 @@ def mass_fn(params, n_steps=200, n_gl=N_GL_DEFAULT, q0=1.0, outer_kw=None, **kw)
 
 
 def radial_acceleration_fn(params, **kw):
-    """g_r(r) = -G M(<r) / r^2, the field a stream integrator actually calls.
+    """g_r(r) = -G M_DM(<r) / r^2, from the DARK MATTER ONLY.
+
+    The baryons are NOT included. They enter the solve as Phi_b, shaping the
+    dark matter, but this returns the dark matter's own field; a stream
+    integrator needs the total, so add the baryon acceleration yourself. The
+    omission is silent and easy to miss -- an orbit outside r1 in this field
+    has exactly zero gradient with respect to Md, a and b, which is the tell.
 
     This is the hot path: an adaptive Dopri5 run of 1000 particles over 5 Gyr
     is about 5.1e6 evaluations, against a single ~19 ms halo solve, so the
