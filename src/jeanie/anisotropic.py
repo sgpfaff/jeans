@@ -223,3 +223,36 @@ def _unused_constant_beta_Lz(beta, L_floor=1e-3):
     quadrature can land on at R = 0.
     """
     return lambda Lz: np.maximum(np.abs(Lz), L_floor) ** (-2.0 * beta)
+
+
+def moments(R, z, psi_of, E, I0, I1, w=None, n_quad=160):
+    """Full second moments at (R, z): (rho, <v_phi^2>, <v_R^2>, beta).
+
+    The density field is only a SECONDARY imprint of anisotropy -- the primary
+    one is the velocity ellipsoid itself, and a model that can report it
+    should not be probed through its weaker shadow. Returning the moments
+    alongside rho lets a search range over the velocity sector, the pseudo
+    phase-space density Q = rho/sigma^3, and v_c, rather than over the density
+    profile and axis ratio alone.
+
+    For f(E, L_z) the meridional velocities stay isotropic, so
+    sigma_R = sigma_z and <v^2> = <v_phi^2> + 2 <v_R^2>.
+    """
+    s, ws = np.polynomial.legendre.leggauss(n_quad)
+    s, ws = 0.5 * (s + 1.0), 0.5 * ws
+    P = float(psi_of(R, z))
+    if P <= 0:
+        return np.nan, np.nan, np.nan, np.nan
+    v = np.sqrt(2.0 * P)
+    x = P * (1.0 - s ** 2)
+    G = np.interp(x, E, I0, left=0.0, right=I0[-1])
+    H = x * G - np.interp(x, E, I1, left=0.0, right=I1[-1])
+    wq = 1.0 if w is None else w(R * v * s)
+    rho = 4.0 * np.pi * v * np.sum(ws * wq * G)
+    if rho <= 0:
+        return np.nan, np.nan, np.nan, np.nan
+    # rho <v_phi^2> = 4 pi v * 2 P sum w s^2 G ; rho <v_m^2> = 8 pi v sum w H
+    vphi2 = 4.0 * np.pi * v * 2.0 * P * np.sum(ws * wq * s ** 2 * G) / rho
+    vm2 = 8.0 * np.pi * v * np.sum(ws * wq * H) / rho
+    vR2 = 0.5 * vm2
+    return rho, vphi2, vR2, 1.0 - vphi2 / vR2 if vR2 > 0 else np.nan
