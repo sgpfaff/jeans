@@ -115,7 +115,11 @@ def rho_aniso(R, z, psi_of, Egrid, G, w=None, n_quad=120):
         Gq = np.interp(P * (1.0 - s ** 2), Egrid, G, left=0.0, right=G[-1])
         wq = 1.0 if w is None else w(Ri * v * s)
         out[idx] = 4.0 * np.pi * v * np.sum(ws * wq * Gq)
-    return out[()] if out.shape == (1,) and np.ndim(R) == 0 else out
+    # out[()] on a shape-(1,) array returns the ARRAY, not a scalar -- only
+    # a 0-d array unwraps that way -- so scalar inputs need out[0].
+    if out.shape == (1,) and np.ndim(R) == 0 and np.ndim(z) == 0:
+        return float(out[0])
+    return out
 
 
 def axis_ratio_of(field, r, lo=0.1, hi=4.0, n=60):
