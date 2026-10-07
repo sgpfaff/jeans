@@ -116,8 +116,33 @@ comes through *occupancy*, not through existence.
    `R = rho_bar/(3 rho_edge)` is its own functional and folds at a different
    turning point of the same sequence — we get `290.47`. Which turning point R
    folds at is a separate question from whether the sequence is classical.
-3. Count simulated SIDM haloes falling below their own predicted floor.
-   Expect zero, plus a pile-up. More than ~5% below → it is not a floor.
+3. **Count simulated SIDM haloes below their own floor — DONE 2026-10-07.
+   PRONG 1 IS DEAD AS FORMULATED.** `bench/boundary/eagle_floor.py`.
+
+   N_below = 0 for all 15 EAGLE-50 haloes — but also for the CDM ones, and
+   that is the problem. Restricted to radii where the first-order kernel is
+   valid (mu < 0.3), **100% of candidate radii lie inside the allowed band**
+   for 13 of 15 haloes and 92% for the other two, with no dependence on the
+   dark matter model.
+
+   Structural, not a sample-size issue. `R = rho_bar/(3 rho(r1))`, so
+   `R < R_MAX = 1.2615` only requires the mean density inside r1 to be under
+   3.78x the local density there. Measured R spans 0.39-1.09 against a ceiling
+   of 1.26+. Every equilibrium halo clears it over most of its range.
+
+   Both predictions fail: no exclusions, and **no pile-up** — margins scatter
+   from 0.03 to 0.37 with haloes sitting well inside.
+
+   The forbidden region is real physics (Bonnor-Ebert verified to 4 digits)
+   but observationally vacuous: it is not a place dark-matter physics keeps
+   haloes out of, it is a place no equilibrium profile goes. Existence is
+   necessary, not sufficient; the sufficient version requires the matched
+   solution to reproduce the observed profile, which reintroduces fitting and
+   every nuisance problem prong 1 existed to avoid.
+
+   **Decision: stop work on prong 1.** Effort moves to the gate and prong 2.
+   Kept: the boundary machinery, the kernels, and the false-exclusion fix,
+   all of which are correctness infrastructure for the solver regardless.
 
 ### Prong 2 — the discovery search (gated)
 
