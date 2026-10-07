@@ -94,6 +94,19 @@ GN = 4.302e-6
 # which no continuation can.
 U_SAFE = 22.5441
 
+# Where fold_u1 starts scanning. NOT U_SAFE, which was the old default and is
+# a false-exclusion bug: the comment above records that baryons move the first
+# fold INWARD of the no-baryon value (22.37768 for a thin shell at 0.6 r1,
+# 22.33819 for a Plummer at b/r1 = 3). A scan starting at U_SAFE steps over it
+# and returns the SECOND fold at ~242 instead, where R_fold is SMALLER -- so
+# exists_with_baryons reported False for a configuration solve_spherical
+# solves. Measured: shell at 0.6 r1, mu_s = 0.02 gives R_fold = 0.949447 from
+# the default against 1.282939 from a scan that starts below, and a halo at
+# R = 1.116193 between them was excluded although it has a root. An exclusion
+# programme cannot afford a false exclusion, so the floor is well below any
+# inward shift observed rather than just below the no-baryon fold.
+_SCAN_FLOOR = 10.0
+
 # R -> 1/3 as u1 -> 0, for any Phi_b: phi, eta and s all vanish at the origin.
 R_FLOOR = 1.0 / 3.0
 
@@ -267,7 +280,7 @@ def fold_u1(P, lo=None, hi=400.0, n_scan=48, n_bisect=40):
     Returns (u1_fold, R_fold) or (nan, nan) if no fold was found below `hi`.
     Used for the exact existence criterion and as the outer bracket.
     """
-    lo = U_SAFE if lo is None else lo
+    lo = _SCAN_FLOOR if lo is None else lo
     us = np.geomspace(lo, hi, n_scan)
     prev_u, prev_d, warm = None, None, None
     for u in us:

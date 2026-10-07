@@ -228,3 +228,29 @@ def test_bracket_and_ramp_agree_where_the_ramp_is_sound():
         assert a.success and b.success, (a.reason, b.reason)
         assert a.r0 == pytest.approx(b.r0, rel=1e-8)
         assert a.sigma0 == pytest.approx(b.sigma0, rel=1e-8)
+
+
+def test_fold_scan_finds_the_first_fold_when_baryons_move_it_inward():
+    """Regression: the scan must not step over a fold that moved inward.
+
+    branch.py records that baryons push the first fold below the no-baryon
+    value. Starting the scan at U_SAFE skipped it and returned the second fold
+    at ~242, where R_fold is SMALLER -- so exists_with_baryons reported False
+    for a configuration solve_spherical solves. A false exclusion is the one
+    error an exclusion programme cannot tolerate.
+    """
+    r1, rho1 = 10.0, 1.0e6
+    unit = 4.0 * np.pi * r1 ** 3 * rho1
+    m = 0.02 * unit
+    pb = lambda r, th: -GN * m / np.maximum(np.asarray(r, float), 0.6 * r1)
+
+    P = _Problem(r1, rho1, 1.0, 400, pb, 16, True)
+    u_fold, R_fold = branch.fold_u1(P)
+    assert 20.0 < u_fold < 23.0, f"found the wrong fold at u1={u_fold}"
+    assert R_fold > 1.2
+
+    M1 = 1.116193 * unit                      # between the two answers
+    P2 = _Problem(r1, rho1, M1, 400, pb, 16, True)
+    ok, _, _ = branch.exists_with_baryons(P2)
+    assert ok is solve_spherical(r1, rho1, M1, Phi_b=pb).success
+    assert ok is True

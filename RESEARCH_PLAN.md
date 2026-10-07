@@ -83,8 +83,27 @@ comes through *occupancy*, not through existence.
    observable: it is reachable iff the trajectory enters `1/3 < R < R_fold`
    somewhere. Four test haloes all do, which is the expected null.
 
-   Still to do here: the linear shell kernel `K(s)` by autodiff, replacing the
-   `eps=1e-5` finite difference in `_det` (`branch.py:244`).
+   **The shell kernels — DONE 2026-10-07.** `bench/boundary/shell_kernel.py`.
+   Both are linear functionals of the baryon mass distribution, so one pass
+   over shells gives the boundary for ANY baryon distribution:
+
+   * `K_u` (fold location) changes sign at `s/r1 = 0.4283`, independently
+     reproducing the 0.425 documented in `branch.py`.
+   * `K_R` (fold value, which is what the criterion uses) crosses zero at
+     `s/r1 ~ 0.22`: mass inside LOWERS `R_fold` (-9 at 0.05 r1), mass outside
+     RAISES it, peaking at 0.40 r1. This is exactly why compact baryons shrink
+     the reachable set.
+   * Both vanish **exactly** beyond `r1`, as they must — a shell outside only
+     shifts Phi by a constant, renormalising rho_0.
+   * Linearity confirmed at 0.04-4% across two amplitudes.
+
+   **Correctness bug found and fixed in the criterion itself.** `fold_u1`
+   defaulted to scanning from `lo = U_SAFE`, but baryons move the first fold
+   INWARD of that (`branch.py` documents 22.37768 and 22.33819). The scan
+   stepped over it and returned the SECOND fold at ~242, where `R_fold` is
+   smaller, so `exists_with_baryons` returned False for a halo
+   `solve_spherical` solves — a FALSE EXCLUSION, the one error an exclusion
+   programme cannot tolerate. Floor moved to 10.0, regression test added.
 2. **External analytic check — DONE 2026-10-07, passes.** The canonical
    turning point of the same march sits at `rho_c/rho_edge = 14.0420` against
    the classical Bonnor-Ebert value `14.04`: four significant figures, nothing
