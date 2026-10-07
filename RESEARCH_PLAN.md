@@ -213,6 +213,37 @@ shape-gradient signature died under one nuisance parameter.
 previously reported as an SIDM signature. Derived inside the model, not
 inferred from five EAGLE haloes.
 
+### Re-prioritised 2026-10-07: anisotropy BEFORE self-consistency
+
+Follows from the degeneracy result above. The full 2D self-consistent solve
+buys only the SECOND-order shape difference (different radial profiles
+back-reacting on Psi_DM). Anisotropy breaks `rho = F(Psi)` outright, so it is
+a FIRST-order effect. Doing the second-order piece first is the wrong order.
+
+Tractable route: an axisymmetric DF `f(E, L_z)` gives `rho = rho(Psi, R)`,
+depending on cylindrical radius as well as potential, so the isodensity
+surfaces no longer coincide with the isopotential ones. That is the first-order
+breaking, and it is the only place a shape discriminant can live.
+
+### Endpoint expansion: TWO approaches tried and rejected
+
+Both fail for the same reason -- at `alpha = 0.18` every central limit is
+numerically unreachable.
+
+1. **Asymptotic replacement.** Derived `f ~ (Psi_max - E)^((alpha-3)/2)`.
+   Measured exponents `-2.03/-1.79/-1.61/-1.39` against predicted
+   `-1.44/-1.41/-1.375/-1.30` for `alpha = 0.12/0.18/0.25/0.40` -- right
+   trend, wrong value. The correction is `O(tau^(alpha/2))`, needing
+   `tau/Psi_max ~ 1e-11`.
+2. **Singularity subtraction with the analytic coefficient.** Needs
+   `(2/alpha) x^alpha << 1`, which is **1.4** at `x = 1e-5`. The analytic
+   `rho_0` overshoots the measured central density by 4x and the subtraction
+   made the round trip worse (2.6e-2 against 1.6e-4) with `f` going negative.
+
+Affects only `Psi > Psi_max`, i.e. the innermost sub-kpc. The shape response
+works outside that, so downstream work proceeds with a documented inner floor
+rather than blocking on it.
+
 ### Consequence: anisotropy is the SIGNAL, not a nuisance
 
 Previously listed here as a limitation to patch for fairness. It is the

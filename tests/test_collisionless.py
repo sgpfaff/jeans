@@ -85,9 +85,25 @@ def test_seed_potential_matches_the_enclosed_mass(inverted):
                           "divergence. The velocity integrand then carries a "
                           "spike no fixed quadrature resolves, and F(Psi) is "
                           "discontinuous at the 0.5-5x level across Psi_max. "
-                          "Needs an analytic endpoint expansion of f near "
-                          "E_max, not a finer grid. Blocks the 2D solve only "
-                          "where baryons drive Psi above the seed's Psi_max.",
+                          "TWO fixes tried and REJECTED, both for the same "
+                          "reason: at alpha=0.18 every central limit is "
+                          "numerically unreachable. (1) Replacing f by its "
+                          "asymptotic form f ~ tau^((alpha-3)/2): measured "
+                          "exponents -2.03/-1.79/-1.61/-1.39 against "
+                          "-1.44/-1.41/-1.375/-1.30 for alpha="
+                          "0.12/0.18/0.25/0.40, since the correction is "
+                          "O(tau^(alpha/2)) and needs tau/Psi_max ~ 1e-11. "
+                          "(2) Subtracting the singular part with the "
+                          "analytic coefficient: the expansion "
+                          "rho_0 - rho ~ rho_0 (2/alpha)(r/r_m2)^alpha needs "
+                          "(2/alpha) x^alpha << 1, which is 1.4 at x=1e-5, so "
+                          "the analytic rho_0 overshoots the measured central "
+                          "density by 4x and the subtraction made the round "
+                          "trip worse (2.6e-2 vs 1.6e-4) with f going "
+                          "negative. Affects only Psi > Psi_max, i.e. the "
+                          "innermost sub-kpc; the shape response works "
+                          "outside that, so the 2D solve proceeds with a "
+                          "documented inner floor rather than blocking.",
                    strict=True)
 def test_F_is_continuous_across_the_seed_potential_maximum(inverted):
     """F must not jump at Psi = max(E): the two regimes are the same integral.
