@@ -363,3 +363,11 @@ Confirm the defect tests reproduce against upstream:
 ```sh
 PYTHONPATH=/path/to/upstream/jeans/src python -m pytest tests/test_defects.py -q
 ```
+
+## Where the science lives
+
+Exploratory scientific work moved to the `sidm-discovery` repo (a sibling
+checkout) so that this one stays a general tool. The line: benchmarks that
+measure the **library** stay here (`bench/branch`, `bench/shape`,
+`bench/figs`, `bench/jax-headtohead`); benchmarks that measure **dark matter**
+moved. `RESEARCH_PLAN.md` went with them.
