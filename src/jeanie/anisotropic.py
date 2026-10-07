@@ -38,6 +38,20 @@ away from the validated isotropic case.
 Sign convention: w suppressing large |L_z| removes circular orbits and biases
 the velocity ellipsoid radially (beta > 0, the CDM-like case); w enhancing
 large |L_z| biases it tangentially.
+
+BETA ALONE DOES NOT SET THE SHAPE DEPARTURE. Measured at the same
+beta = 0.29: the Gaussian family gives q_rho - q_Psi = 0.079 at 8 kpc, the
+scale-free constant-beta family gives 0.545 at 10 kpc -- a factor of seven at
+identical anisotropy. The departure depends on the angular-momentum structure
+of w, not just on its second moment, because a scale-free w puts an explicit
+R^(-2p) factor into rho while one with a characteristic L_a does not. So
+"CDM has beta ~ 0.3, therefore the departure is X" is not a valid inference;
+the honest statement is a range of 0.08 to 0.77 across the families tried,
+all of which are several times a plausible measurement error.
+
+That is awkward for forecasting a single number and useful for the discovery
+programme: the observable carries information about the DF's structure, not
+just one moment of it.
 """
 import numpy as np
 
@@ -174,3 +188,34 @@ def beta_phi(R, z, psi_of, E, I0, I1, w=None, n_quad=160):
     if den <= 0:
         return np.nan
     return 1.0 - num / den                             # <v_m^2>/2 = <v_R^2>
+
+
+def constant_beta_Lz(p, L_c=50.0):
+    """w = (1 + (L_z/L_c)^2)^(-p): constant anisotropy, finite on the axis.
+
+    The bare |L_z|^(-2p) form holds beta constant but DIVERGES on the
+    symmetry axis, where every orbit has L_z = 0, so rho(0, z) is infinite and
+    no pole-referenced axis ratio exists. The L_c regularisation leaves the
+    large-|L_z| behaviour untouched and makes the axis finite.
+
+    Note p is not beta: measured beta came out at twice the exponent for the
+    bare power law, because for f(E, L_z) the anisotropy is
+    azimuthal-against-meridional rather than the 3D radial beta that the
+    textbook L^(-2 beta) relation refers to. Calibrate with beta_phi.
+    """
+    return lambda Lz: (1.0 + (Lz / L_c) ** 2) ** (-p)
+
+
+def _unused_constant_beta_Lz(beta, L_floor=1e-3):
+    """w = |L_z|^(-2 beta): the constant-anisotropy family.
+
+    The Gaussian and quadratic weights above have a FIXED angular-momentum
+    scale, so their beta climbs steeply with radius (measured -0.03 at 2 kpc
+    to 0.96 at 60 kpc for L_a = 3500). That conflates "the departure grows
+    outward" with "beta grows outward". This family holds beta roughly fixed,
+    which is what is needed to quote a departure at a stated anisotropy.
+
+    Integrable for beta < 1/2; L_floor regularises L_z = 0, which the
+    quadrature can land on at R = 0.
+    """
+    return lambda Lz: np.maximum(np.abs(Lz), L_floor) ** (-2.0 * beta)
