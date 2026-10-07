@@ -66,11 +66,25 @@ comes through *occupancy*, not through existence.
 
 **First deliverables.**
 
-1. The `R_fold(mu)` curve and the linear shell kernel `K(s)` giving `R_fold` to
-   first order for any baryon distribution, by autodiff rather than the
-   `eps=1e-5` finite difference in `_det` (`branch.py:244`). `K(s)` is also the
-   sensitivity of the boundary to baryon *shape*, which tells us how much the
-   CDM-shape problem matters here.
+1. **The `R_fold(mu)` curve — DONE 2026-10-07.** `bench/boundary/`. The
+   dimensionless claim is verified, not assumed: `R_fold` is identical to 8
+   decimal places across `r1` = 3-40 kpc and `rho1` = 2.5e5-1e7, so it really
+   does depend only on `(mu, shape)`. It runs from 1.2615 at `mu=0` (matching
+   `universal.R_MAX` to 6e-7) to ~10 at `mu=60`.
+
+   Baryon shape matters more than expected and was nearly dismissed: `R_fold`
+   spans 0.42x to 1.18x the thin-disc value, and moves in OPPOSITE directions
+   — extended baryons raise the boundary, a compact central concentration
+   lowers it (deepens the well, destabilises). So the boundary is a family
+   indexed by the stellar distribution. That is an observable, so it is a
+   measurement requirement rather than a modelling problem.
+
+   A halo is a TRAJECTORY in `(mu, R)`, not a point, because `r1` is not
+   observable: it is reachable iff the trajectory enters `1/3 < R < R_fold`
+   somewhere. Four test haloes all do, which is the expected null.
+
+   Still to do here: the linear shell kernel `K(s)` by autodiff, replacing the
+   `eps=1e-5` finite difference in `_det` (`branch.py:244`).
 2. **External analytic check — DONE 2026-10-07, passes.** The canonical
    turning point of the same march sits at `rho_c/rho_edge = 14.0420` against
    the classical Bonnor-Ebert value `14.04`: four significant figures, nothing
