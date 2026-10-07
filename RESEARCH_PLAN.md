@@ -71,10 +71,18 @@ comes through *occupancy*, not through existence.
    `eps=1e-5` finite difference in `_det` (`branch.py:244`). `K(s)` is also the
    sensitivity of the boundary to baryon *shape*, which tells us how much the
    CDM-shape problem matters here.
-2. **External analytic check**: swap the NFW envelope for a rigid box and
-   recover Antonov's `rho_c/rho_edge = 708.6`. *If this misses by more than a
-   few percent the fold is numerics and everything downstream is a
-   self-portrait.* Do this before anything else.
+2. **External analytic check — DONE 2026-10-07, passes.** The canonical
+   turning point of the same march sits at `rho_c/rho_edge = 14.0420` against
+   the classical Bonnor-Ebert value `14.04`: four significant figures, nothing
+   fitted. The march IS the classical isothermal sphere, so `R_fold` is a real
+   turning point and not a convergence artifact. `bench/boundary/`,
+   `tests/test_boundary_is_classical.py`.
+
+   The originally planned check was wrong and would have "failed" for the
+   wrong reason: it asked for Antonov's microcanonical `708.61` AT OUR FOLD.
+   `R = rho_bar/(3 rho_edge)` is its own functional and folds at a different
+   turning point of the same sequence — we get `290.47`. Which turning point R
+   folds at is a separate question from whether the sequence is classical.
 3. Count simulated SIDM haloes falling below their own predicted floor.
    Expect zero, plus a pile-up. More than ~5% below → it is not a floor.
 
