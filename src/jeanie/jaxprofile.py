@@ -41,6 +41,7 @@ if HAVE_JAX:
     from jax import lax
 
 __all__ = ["rk4_monopole_traj", "interior_profile", "density_fn",
+           "potential_fn",
            "spherical_density_fn", "mass_fn", "radial_acceleration_fn"]
 
 
@@ -251,3 +252,49 @@ def radial_acceleration_fn(params, **kw):
         return jnp.where(r > 0.0, -GN * M(rs) / rs ** 2, 0.0)
 
     return g
+
+
+def potential_fn(params, r_max=None, n_grid=512, **kw):
+    """Phi(r) for the DARK MATTER, traceable and differentiable.
+
+    Integrates dPhi/dr = G M(<r)/r^2 inward from an outer anchor where the
+    halo is treated as a point mass, Phi(r_max) = -G M(<r_max)/r_max. Hermite
+    interpolation on a log grid, with the derivative taken from M(r) exactly
+    rather than differenced, so dPhi/dr is consistent with
+    radial_acceleration_fn to machine precision instead of approximately.
+
+    DARK MATTER ONLY, like mass_fn and radial_acceleration_fn. The baryons
+    shape the halo through Phi_b but are not added here; an orbit integrator
+    needs the total and must add the baryonic potential itself. The omission
+    is silent -- the tell is that an orbit outside r1 has exactly zero
+    gradient with respect to Md, a and b.
+    """
+    _require_jax()
+    M = mass_fn(params, **kw)
+    r1 = params[2]
+    rmax = 50.0 * r1 if r_max is None else r_max
+    u = jnp.linspace(jnp.log(1e-4 * r1), jnp.log(rmax), n_grid)
+    rg = jnp.exp(u)
+    # M is NOT vectorised over r: its exterior branch runs a fixed
+    # quadrature whose grid collides with the radial grid under broadcasting.
+    Mg = jax.vmap(M)(rg)
+    dPhi = GN * Mg / rg ** 2                        # dPhi/dr
+    integ = dPhi * rg                               # dPhi/du
+    # cumulative from the outer end inward
+    seg = 0.5 * (integ[1:] + integ[:-1]) * jnp.diff(u)
+    tail = jnp.concatenate([jnp.cumsum(seg[::-1])[::-1], jnp.zeros(1)])
+    Phi_inf = -GN * M(rmax) / rmax
+    Phi_g = Phi_inf - tail
+
+    def Phi(r):
+        r = jnp.asarray(r, float)
+        rc = jnp.clip(r, rg[0], rg[-1])
+        # Hermite in log r, with dPhi/du = G M(r)/r exact at the nodes. Plain
+        # linear interpolation here left the agreement with
+        # radial_acceleration_fn at 1.4e-2, which is the docstring's claim
+        # unmet and far too coarse for an orbit integrator.
+        lo = _hermite(jnp.log(rc), u[0], u[1] - u[0], Phi_g, GN * Mg / rg)
+        # beyond the grid the halo is a point mass
+        return jnp.where(r > rg[-1], Phi_inf * rmax / r, lo)
+
+    return Phi

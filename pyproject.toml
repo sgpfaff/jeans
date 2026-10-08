@@ -20,6 +20,15 @@ dependencies = [
   "dill>=0.4,<1",
 ]
 
+[project.optional-dependencies]
+# Orbit libraries for jeanie.export. None is required to solve a halo; each
+# is imported only by its own exporter. agama compiles C++, so it is slow to
+# install; galax pulls in jax, equinox and unxt.
+galpy = ["galpy>=1.11"]
+agama = ["agama"]
+galax = ["galax"]
+export = ["galpy>=1.11", "agama", "galax"]
+
 [project.urls]
 "Source Code" = "https://github.com/dark-physics/jeans.git"
 
