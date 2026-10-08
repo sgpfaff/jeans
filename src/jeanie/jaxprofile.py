@@ -1,11 +1,13 @@
 """A differentiable density profile for the solved halo, as one JAX callable.
 
-Everything downstream of this package wants the same object. galpy's
-MultipoleExpansionPotential.from_density takes rho(r), rho(R, z) or
-rho(R, z, phi); agama's Potential(type='Multipole', density=...) takes the
-same; galax and StreamSculptor want Phi, which follows from rho. So rather
-than three exporters there is one deliverable -- a traceable rho(R, z) that is
-differentiable in the halo parameters -- and three thin adapters over it.
+Everything downstream of this package wants the same object. agama's
+Potential(type='Multipole', density=...) takes rho(R, z) directly, and so
+does jeanie's own multipole, which is what the galpy export is built on --
+galpy ships no multipole potential, only the Hernquist-Ostriker SCF basis,
+and that does not converge on a cored halo matched to an Einasto envelope.
+galax and StreamSculptor want Phi, which follows from rho. So rather than
+three exporters there is one deliverable -- a traceable rho(R, z) that is
+differentiable in the halo parameters -- and thin adapters over it.
 
 The solvers could not supply that. jaxsolver.solve_log returns only
 [log r0, log sigma0]: rk4_monopole's lax.scan discards its trajectory, so the
@@ -138,8 +140,10 @@ def density_fn(params, n_steps=200, n_gl=N_GL_DEFAULT, q0=1.0,
     """Return rho(R, z), traceable and differentiable in `params`.
 
     R and z are cylindrical, in kpc; the return is Msun/kpc^3. Accepts arrays
-    and broadcasts. Suitable directly as the `dens` argument of galpy's
-    MultipoleExpansionPotential.from_density or agama's Multipole.
+    and broadcasts. Suitable directly as the `density` argument of agama's
+    Multipole, or of jeanie's own (jeanie.multipole.MultipoleExpansion --
+    galpy has no multipole potential, only the SCF basis, which does not
+    converge here). See jeanie.export.
     """
     _require_jax()
     from . import jaxouter as JO

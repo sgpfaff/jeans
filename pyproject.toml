@@ -22,12 +22,27 @@ dependencies = [
 
 [project.optional-dependencies]
 # Orbit libraries for jeanie.export. None is required to solve a halo; each
-# is imported only by its own exporter. agama compiles C++, so it is slow to
-# install; galax pulls in jax, equinox and unxt.
+# is imported only by its own exporter.
+#
+# galax is deliberately absent. Its PyPI releases are 0.0.2 and 0.0.3, both
+# years behind the repository: 0.0.2 imports a private equinox symbol that
+# equinox 0.13 no longer has (`_has_dataclass_init`), and 0.0.3 requires
+# `tfp-nightly`, which no longer publishes. Listing `galax` here would
+# install the broken 0.0.2. The working install is from the monorepo, whose
+# subpackages are not on PyPI either, so all of them are named explicitly:
+#
+#   git clone --depth 1 https://github.com/GalacticDynamics/galax
+#   pip install ./galax/packages/galax.coordinates \
+#               ./galax/packages/galax.potential \
+#               ./galax/packages/galax.interop.astropy ./galax
+#
+# Install those before the metapackage, and if pip removed an older `galax`
+# during the run, repeat with --no-deps --force-reinstall: the uninstall
+# takes `galax/__init__.py` and `galax/potential/__init__.py` with it and
+# leaves a namespace package that imports as empty.
 galpy = ["galpy>=1.11"]
 agama = ["agama"]
-galax = ["galax"]
-export = ["galpy>=1.11", "agama", "galax"]
+export = ["galpy>=1.11", "agama"]
 
 [project.urls]
 "Source Code" = "https://github.com/dark-physics/jeans.git"

@@ -1,8 +1,9 @@
 """The exported density: the one object every downstream consumer wants.
 
-galpy's MultipoleExpansionPotential.from_density, agama's Multipole and
-galax/StreamSculptor all take a density callable (or a potential derived from
-one), so this layer is what makes the halo usable as a potential at all. It
+agama's Multipole, jeanie's own multipole (which is what the galpy export
+rides on, galpy having none) and galax/StreamSculptor all take a density
+callable, or a potential derived from one, so this layer is what makes the
+halo usable as a potential at all. It
 did not exist before: solve_log returns only [log r0, log sigma0] and
 rk4_monopole's scan discarded the interior trajectory.
 """
