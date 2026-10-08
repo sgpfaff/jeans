@@ -40,9 +40,13 @@ dependencies = [
 # during the run, repeat with --no-deps --force-reinstall: the uninstall
 # takes `galax/__init__.py` and `galax/potential/__init__.py` with it and
 # leaves a namespace package that imports as empty.
-galpy = ["galpy>=1.11"]
+# galpy >= 1.12 for MultipoleExpansionPotential, which is what
+# to_galpy(kind="multipole") is built on. On 1.11 that raises with a pointer
+# to kind="multipole-ref", jeanie's own expansion, which needs nothing
+# beyond the Potential base class.
+galpy = ["galpy>=1.12"]
 agama = ["agama"]
-export = ["galpy>=1.11", "agama"]
+export = ["galpy>=1.12", "agama"]
 
 [project.urls]
 "Source Code" = "https://github.com/dark-physics/jeans.git"

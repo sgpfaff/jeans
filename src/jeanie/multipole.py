@@ -1,14 +1,20 @@
 """Axisymmetric multipole expansion of a solved halo.
 
-WHY THIS EXISTS. galpy has no multipole potential. Its only basis expansion
-is SCFPotential (Hernquist-Ostriker), and that one does not converge on this
-profile -- 40% median density error at (N,L) = (8,6) and 28% at (20,10), so
-raising the order buys almost nothing -- because a thermalised core matched
-to an Einasto envelope has a kink at r1 that a smooth Hernquist radial basis
-cannot follow. A multipole has no radial basis to be wrong about: it expands
-only in angle and solves the radial Poisson equation by quadrature, so a kink
-costs nothing as long as it sits on a grid node. On the same comparison this
-module is at 2.5e-4.
+WHY THIS EXISTS. Not because galpy lacks one -- galpy 1.12 added
+MultipoleExpansionPotential, it is C-backed, and jeanie.export uses it by
+default. This module is the second implementation, and it earns its place
+three ways: it needs no library at all, so shape diagnostics work in a bare
+environment and on galpy 1.11, where the only basis expansion is SCF and
+that does not converge on this profile at any order (40% median density
+error at (N,L) = (8,6), 28% at (20,10)); it is a quadrature scheme rather
+than a spline one, so it fails differently; and disagreeing with galpy is
+what would catch either of them being wrong. On the comparison grid in
+to_galpy this module is 2.5e-4 and galpy's is 2.1e-4.
+
+Being the quadrature scheme is not a detail. Pinning a node either side of
+the break at r1 is worth four orders of magnitude here -- and the same move
+takes galpy's spline-based expansion to 2e+2, because two nodes a part in
+1e9 apart are not something an interpolating spline can be asked to fit.
 
     rho(r, mu) = sum_l rho_l(r) P_l(mu),   mu = cos(theta)
 

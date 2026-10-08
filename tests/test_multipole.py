@@ -1,10 +1,16 @@
-"""The multipole expansion, against answers that are exact.
+"""jeanie's own multipole expansion, against answers that are exact.
 
-galpy ships no multipole -- SCFPotential is its only basis expansion, and it
-does not converge on this profile -- so jeanie carries its own. That means it
-has to be validated against closed-form Poisson solutions rather than against
-another code, which is what these tests do. The cross-check against agama's
-independent Multipole lives in test_export.py.
+This is not the default export -- galpy 1.12's MultipoleExpansionPotential
+is, and it is better on every axis that matters for an orbit. This one is
+the second implementation: library-free, a quadrature scheme rather than a
+spline one, and therefore wrong in different ways, which is the only reason
+a cross-check is worth anything. It is also the route on galpy 1.11, whose
+only basis expansion is SCF and does not converge here.
+
+These tests validate it against closed-form Poisson solutions, because a
+second implementation that was only ever checked against the first would be
+no check at all. The three-way agreement with galpy and agama on the forces
+is in test_export.py.
 """
 import numpy as np
 import pytest

@@ -112,12 +112,14 @@ def test_the_multipole_reproduces_the_density_it_was_built_from(mp):
     assert max(err) < 2e-2
 
 
-def test_galpy_multipole_round_trips_through_galpys_own_evaluation():
+def test_galpy_multipole_ref_round_trips_through_galpys_own_evaluation():
     """Only the unit conversion is under test here, so it should be exact:
-    galpy is handed R and z in ro and must give back vo^2 and vo^2/ro."""
+    galpy is handed R and z in ro and must give back vo^2 and vo^2/ro. Runs
+    on the reference expansion, which is the one this repo owns end to end;
+    the native path is checked against it below."""
     galpy = pytest.importorskip("galpy.potential")
     from jeanie.export import to_galpy
-    pot = to_galpy(PARAMS, ro=RO, vo=VO, kind="multipole", baryons=False)
+    pot = to_galpy(PARAMS, ro=RO, vo=VO, kind="multipole-ref", baryons=False)
     exp = pot._expansion
     D0 = (VO ** 2 * RO / GN) / RO ** 3
     for R, z in [(1., 0.), (5., 2.), (15., 0.), (60., 30.), (200., 0.)]:
@@ -132,15 +134,12 @@ def test_galpy_multipole_round_trips_through_galpys_own_evaluation():
         assert abs(d / float(exp.density(R, z)) - 1) < 1e-12
 
 
-def test_galpy_multipole_keeps_the_flattening_spherical_throws_away():
-    """The reason the multipole exists. The reference halo runs from q = 0.62
-    at 3 kpc to q = 0.93 at 14 kpc -- a shape gradient set by the disc -- and
-    kind='spherical' reports q = 1 everywhere."""
-    pytest.importorskip("galpy.potential")
+def test_the_multipole_keeps_the_flattening_spherical_throws_away(mp):
+    """The reason any multipole is used here at all. The reference halo runs
+    from q = 0.62 at 3 kpc to q = 0.93 at 14 kpc -- a shape gradient set by
+    the disc -- and kind='spherical' reports q = 1 everywhere."""
     from scipy.optimize import brentq
-    from jeanie.export import to_galpy
-    exp = to_galpy(PARAMS, ro=RO, vo=VO, kind="multipole",
-                   baryons=False)._expansion
+    exp = mp
     q = []
     for r in (3.0, 14.0):
         target = float(exp.density(r, 0.0))
@@ -151,13 +150,14 @@ def test_galpy_multipole_keeps_the_flattening_spherical_throws_away():
     assert q[1] < 1.0
 
 
-def test_galpy_multipole_conserves_energy_on_an_orbit():
+@pytest.mark.parametrize("kind", ["multipole", "multipole-ref"])
+def test_galpy_multipole_conserves_energy_on_an_orbit(kind):
     """A potential whose forces are not the exact derivative of its own
     interpolant leaks energy, and the leak looks like physics."""
     pytest.importorskip("galpy.potential")
     from galpy.orbit import Orbit
     from jeanie.export import to_galpy
-    pot = to_galpy(PARAMS, ro=RO, vo=VO, kind="multipole", baryons=True)
+    pot = to_galpy(PARAMS, ro=RO, vo=VO, kind=kind, baryons=True)
     o = Orbit([30. / RO, 0.0, 180. / VO, 2. / RO, 20. / VO, 0.0],
               ro=RO, vo=VO)
     ts = np.linspace(0.0, 2.0, 401)
@@ -166,10 +166,64 @@ def test_galpy_multipole_conserves_energy_on_an_orbit():
     assert np.ptp(E) / abs(np.mean(E)) < 1e-9
 
 
+def test_galpys_native_multipole_agrees_with_jeanies_on_the_forces(mp):
+    """galpy 1.12's MultipoleExpansionPotential and jeanie's expansion are
+    independent: a spline scheme and a quadrature scheme, written by
+    different people against the same equations. Agreement on the forces to
+    1e-3 is the strongest statement in this file.
+
+    They do NOT agree on Phi, by a constant 3.2e3 (km/s)^2 -- galpy sets the
+    density to zero beyond rmax and jeanie extrapolates a power law, which
+    for an Einasto envelope is about 1e11 Msun past 900 kpc. Constant, so no
+    force and no orbit sees it; not constant-in-rmax, so an energy does."""
+    import galpy.potential as galpy
+    from jeanie.export import to_galpy
+    pot = to_galpy(PARAMS, ro=RO, vo=VO, kind="multipole", baryons=False)
+    F0, P0 = VO ** 2 / RO, VO ** 2
+    offs = []
+    for R, z in [(1., 0.), (5., 2.), (10., 4.), (15.5, 0.), (60., 30.),
+                 (200., 0.)]:
+        f = float(galpy.evaluateRforces(pot, R / RO, z / RO,
+                                        use_physical=False)) * F0
+        p = float(galpy.evaluatePotentials(pot, R / RO, z / RO,
+                                           use_physical=False)) * P0
+        assert abs(f / float(mp.forces(R, z)[0]) - 1) < 1e-3
+        offs.append(p - float(mp.potential(R, z)))
+    assert np.ptp(offs) / abs(np.mean(offs)) < 0.01      # a constant
+
+
+def test_galpys_native_multipole_reproduces_the_density():
+    """2.1e-4 median on the reference grid at lmax=8 -- see to_galpy. The
+    worst case is the midplane inside r1, as it is for every expansion here."""
+    import galpy.potential as galpy
+    from jeanie.export import to_galpy
+    pot = to_galpy(PARAMS, ro=RO, vo=VO, kind="multipole", baryons=False)
+    D0 = (VO ** 2 * RO / GN) / RO ** 3
+    rho = callables(PARAMS)["rho"]
+    pts = [(1., 0.), (5., 5.), (10., 4.), (15.5, 0.), (20., 10.),
+           (40., 0.), (150., 0.)]
+    err = [abs(float(galpy.evaluateDensities(pot, R / RO, z / RO,
+                                             use_physical=False)) * D0
+               / float(rho(R, z)) - 1) for R, z in pts]
+    assert np.median(err) < 2e-3
+    assert max(err) < 3e-2
+
+
+def test_the_native_multipole_needs_galpy_112():
+    """A clear pointer rather than an AttributeError three frames down."""
+    import galpy
+    from packaging.version import Version
+    if Version(galpy.__version__) >= Version("1.12"):
+        pytest.skip("galpy >= 1.12 has MultipoleExpansionPotential")
+    from jeanie.export import to_galpy
+    with pytest.raises(ImportError, match="multipole-ref"):
+        to_galpy(PARAMS, kind="multipole")
+
+
 def test_an_unknown_kind_is_refused():
     pytest.importorskip("galpy.potential")
     from jeanie.export import to_galpy
-    with pytest.raises(ValueError, match="multipole"):
+    with pytest.raises(ValueError, match="multipole-ref"):
         to_galpy(PARAMS, kind="octopole")
 
 
@@ -325,3 +379,36 @@ def test_galax_stays_differentiable_in_the_halo_parameters():
     assert np.all(np.isfinite(gr))
     assert abs(gr[2]) > 0.0            # responds to r1
     assert abs(gr[3]) > 0.0            # and to the disc mass
+
+
+def test_the_batched_density_actually_covers_what_galpy_asks_for():
+    """Guards a 7x build-time difference that would otherwise come back
+    silently. galpy walks the (r, cos theta) grid one scalar call at a time;
+    jeanie precomputes exactly those points in one vectorised call. If galpy
+    ever changes which points it visits the table stops hitting, the
+    fallback keeps the answer right, and the build quietly goes from 12 s
+    back to 88 s -- so assert the hits, not the timing."""
+    from numpy.polynomial.legendre import leggauss
+    from jeanie.export import _batched_for_galpy
+    from jeanie.jaxprofile import density_fn
+
+    RO_, VO_ = 8.0, 220.0
+    D0 = (VO_ ** 2 * RO_ / GN) / RO_ ** 3
+    rgrid = np.geomspace(0.015, 900.0, 64) / RO_
+    order = 20
+    dens = _batched_for_galpy(density_fn(PARAMS), rgrid, order, RO_, D0)
+
+    # the loop galpy runs, verbatim
+    ct_nodes, _ = leggauss(order)
+    misses = 0
+    for r in rgrid:
+        for ct in ct_nodes:
+            sintheta = np.sqrt(1.0 - ct ** 2)
+            if (r * sintheta, r * ct) not in dens.table:
+                misses += 1
+    assert misses == 0
+
+    # and a point it never saw still comes back right
+    off = float(dens(1.2345, 0.6789))
+    ref = float(density_fn(PARAMS)(1.2345 * RO_, 0.6789 * RO_)) / D0
+    assert abs(off / ref - 1) < 1e-12
