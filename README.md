@@ -32,9 +32,15 @@
 >   `MultipoleExpansionPotential.from_density`, agama's `Multipole`, and
 >   galax/StreamSculptor all consume.
 >
-> Examples: [`examples/jeanie_basics.ipynb`](examples/jeanie_basics.ipynb),
-> [`examples/jeanie_differentiable.ipynb`](examples/jeanie_differentiable.ipynb),
-> and [`examples/jeanie_quickstart.py`](examples/jeanie_quickstart.py), which is
+> Examples, in reading order:
+>
+> | notebook | what it answers |
+> |:--|:--|
+> | [`jeanie_basics.ipynb`](examples/jeanie_basics.ipynb) | does it agree with `jeans`, why is it faster, and how do I hand the result to an orbit integrator |
+> | [`jeanie_differentiable.ipynb`](examples/jeanie_differentiable.ipynb) | gradients, `vmap` ensembles, and the existence criterion |
+> | [`jeanie_export_potentials.ipynb`](examples/jeanie_export_potentials.ipynb) | the galpy / agama / galax exports in detail — accuracy, units, and `G` |
+>
+> Also [`examples/jeanie_quickstart.py`](examples/jeanie_quickstart.py), which is
 > run by the test suite so it cannot go stale.
 >
 > **Note on the distribution name.** `jeans` is taken on PyPI by an unrelated
